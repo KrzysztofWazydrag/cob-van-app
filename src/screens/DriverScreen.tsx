@@ -112,6 +112,9 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
               {orders.map((order) => {
                 const isCollected = order.status === 'collected';
                 const isReady = order.status === 'ready';
+                const actionLabel = order.fulfilmentType === 'ready_stock' && order.status === 'reserved'
+                  ? 'Mark ready'
+                  : actionLabels[order.status];
                 return (
                   <View key={order.id} style={[styles.orderCard, isReady && styles.orderCardReady, isCollected && styles.orderCardCollected]}>
                     <View style={styles.orderMainRow}>
@@ -133,13 +136,13 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
                         <Text style={[styles.statusText, order.status === 'ready' && styles.statusTextReady]}>{statusLabels[order.status]}</Text>
                       </View>
                       <Pressable
-                        accessibilityLabel={`${actionLabels[order.status]} for order ${order.orderNumber}`}
+                        accessibilityLabel={`${actionLabel} for order ${order.orderNumber}`}
                         accessibilityState={{ disabled: isCollected }}
                         disabled={isCollected}
                         onPress={() => onAdvanceOrder(order.id)}
                         style={[styles.orderActionButton, isCollected && styles.orderActionButtonDisabled]}
                       >
-                        <Text style={[styles.orderActionText, isCollected && styles.orderActionTextDisabled]}>{actionLabels[order.status]}</Text>
+                        <Text style={[styles.orderActionText, isCollected && styles.orderActionTextDisabled]}>{actionLabel}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -154,7 +157,7 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
               <Text style={styles.listHint}>Physical stock split</Text>
             </View>
             <View style={styles.stockList}>
-              {products.map((product) => {
+              {products.filter((product) => product.fulfilmentType === 'ready_stock').map((product) => {
                 const stock = inventory[product.id];
                 const walkUpAvailable = Math.min(stock.walkUpBuffer, stock.physical - stock.reserved);
                 const canSellWalkUp = stopMode && walkUpAvailable > 0;

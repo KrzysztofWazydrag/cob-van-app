@@ -11,6 +11,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BuildYourOwnModal } from '../components/BuildYourOwnModal';
 import { FoodImage } from '../components/FoodImage';
+import { InVanStockModal } from '../components/InVanStockModal';
 import { VanTrackingModal } from '../components/VanTrackingModal';
 import { products, reservableCount, type Inventory, type Order, type OrderStatus, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
@@ -49,6 +50,7 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
   const [reserved, setReserved] = useState(false);
   const [category, setCategory] = useState<Product['category']>('cobs');
   const [tracking, setTracking] = useState(false);
+  const [inVanStock, setInVanStock] = useState(false);
   const [building, setBuilding] = useState(false);
   const [tab, setTab] = useState<CustomerTab>('home');
 
@@ -165,9 +167,26 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
           style={styles.hero}
         >
           <View style={styles.heroShade} />
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{stopMode ? 'AT ACERO NOW' : 'ON THE WAY'}</Text>
+          <View style={styles.heroTopRow}>
+            <Pressable
+              accessibilityLabel={`${stopMode ? 'At Acero now' : 'On the way'}. Track the van on the map`}
+              accessibilityRole="button"
+              onPress={() => setTracking(true)}
+              style={({ pressed }) => [styles.livePill, pressed && styles.heroControlPressed]}
+            >
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>{stopMode ? 'AT ACERO NOW' : 'ON THE WAY'}</Text>
+              <Text style={styles.liveLinkIcon}>↗</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="See food ready in the van"
+              accessibilityRole="button"
+              onPress={() => setInVanStock(true)}
+              style={({ pressed }) => [styles.vanStockButton, pressed && styles.heroControlPressed]}
+            >
+              <Text style={styles.vanStockIcon}>🚐</Text>
+              <Text style={styles.vanStockText}>IN THE VAN</Text>
+            </Pressable>
           </View>
           <View style={styles.heroCopy}>
             <Text style={styles.heroTitle}>The Cob Van</Text>
@@ -218,14 +237,6 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
 
         <View style={styles.productList}>{visibleProducts.map(renderProductCard)}</View>
 
-        <Pressable accessibilityLabel="Track the van on a live map" onPress={() => setTracking(true)} style={styles.routeCard}>
-          <View style={styles.routeIcon}><Text style={styles.routeIconText}>↗</Text></View>
-          <View style={styles.routeCopy}>
-            <Text style={styles.routeTitle}>Track the van</Text>
-            <Text style={styles.routeBody}>2 stops away · Birchwood Road</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
           </>
         ) : tab === 'favourites' ? (
           <View style={styles.tabScreen}>
@@ -362,6 +373,15 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
         }}
         visible={building}
       />
+      <InVanStockModal
+        inventory={inventory}
+        onChoose={(product) => {
+          setInVanStock(false);
+          openProduct(product);
+        }}
+        onClose={() => setInVanStock(false)}
+        visible={inVanStock}
+      />
       <VanTrackingModal onClose={() => setTracking(false)} visible={tracking} />
     </SafeAreaView>
   );
@@ -385,9 +405,15 @@ const styles = StyleSheet.create({
   hero: { height: 272, justifyContent: 'space-between', marginBottom: spacing.xxl, overflow: 'hidden', padding: spacing.lg },
   heroImage: { borderRadius: radius.lg },
   heroShade: { backgroundColor: 'rgba(13,27,42,0.38)', borderRadius: radius.lg, bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
-  livePill: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: colors.paper, borderRadius: radius.pill, flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  heroTopRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', zIndex: 1 },
+  livePill: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.pill, flexDirection: 'row', minHeight: spacing.xxxl + spacing.sm, paddingHorizontal: spacing.md },
   liveDot: { backgroundColor: colors.green, borderRadius: radius.pill, height: 8, marginRight: spacing.sm, width: 8 },
   liveText: { color: colors.ink, fontSize: type.tiny, fontWeight: '900', letterSpacing: 0.8 },
+  liveLinkIcon: { color: colors.orange, fontSize: type.body, fontWeight: '900', marginLeft: spacing.sm },
+  vanStockButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, flexDirection: 'row', minHeight: spacing.xxxl + spacing.sm, paddingHorizontal: spacing.md },
+  vanStockIcon: { fontSize: type.body, marginRight: spacing.xs },
+  vanStockText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  heroControlPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
   heroCopy: { zIndex: 1 },
   heroTitle: { color: colors.paper, fontSize: type.hero, fontWeight: '900', letterSpacing: -0.8 },
   etaRow: { alignItems: 'center', flexDirection: 'row', marginTop: spacing.sm },
@@ -430,13 +456,6 @@ const styles = StyleSheet.create({
   addButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, height: 36, justifyContent: 'center', width: 36 },
   addButtonDisabled: { backgroundColor: colors.line },
   addButtonText: { color: colors.ink, fontSize: type.title, fontWeight: '700', lineHeight: 25 },
-  routeCard: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.md, flexDirection: 'row', marginTop: spacing.xl, padding: spacing.lg },
-  routeIcon: { alignItems: 'center', backgroundColor: colors.inkSoft, borderRadius: radius.sm, height: 44, justifyContent: 'center', width: 44 },
-  routeIconText: { color: colors.mustard, fontSize: type.title, fontWeight: '900' },
-  routeCopy: { flex: 1, marginLeft: spacing.md },
-  routeTitle: { color: colors.paper, fontSize: type.body, fontWeight: '800' },
-  routeBody: { color: colors.paper, fontSize: type.tiny, marginTop: spacing.xs, opacity: 0.66 },
-  chevron: { color: colors.paper, fontSize: type.hero, opacity: 0.7 },
   tabScreen: { paddingBottom: spacing.xxl },
   tabEyebrow: { color: colors.orange, fontSize: type.tiny, fontWeight: '900', letterSpacing: 1, marginTop: spacing.sm },
   tabTitle: { color: colors.ink, fontSize: type.hero, fontWeight: '900', marginTop: spacing.xs },

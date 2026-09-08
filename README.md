@@ -4,13 +4,13 @@ Interactive Expo prototype for iOS, Android, and web.
 
 ## What is included
 
-- Customer home with live ETA, breakfast cutoff, menu categories, low-stock prompts, and van tracking
+- Customer home with tappable live ETA tracking, ready van stock, menu categories, and low-stock prompts
 - Product customisation with sauce, quantity, and `Reserve mine`
 - Build-your-own cob, baguette, or wrap with live filling prices and a clear order summary
 - Working Home, Favourites, and Orders customer tabs
 - One distinct local food photo for every menu item
 - New reservations appear immediately in the current-stop driver order list
-- Van crew order flow: `Reserved → Preparing → Ready → Collected`
+- Van crew order flow: ready van stock goes straight to `Ready → Collected`; made-to-order food uses `Reserved → Preparing → Ready → Collected`
 - Each order shows customer, number, item, quantity, options, price, and status
 - Van crew view with next stop, arrival action, order list, and stock split
 - Reserved vs walk-in stock visibility to reduce waste

@@ -6,7 +6,7 @@ import { CustomerScreen } from './src/screens/CustomerScreen';
 import { DriverScreen } from './src/screens/DriverScreen';
 import type { Role } from './src/components/RoleSwitch';
 import { colors } from './src/theme';
-import { initialInventory, orders as initialOrders, type Inventory, type Order, type Product } from './src/data';
+import { initialInventory, orders as initialOrders, products, type Inventory, type Order, type Product } from './src/data';
 import { notifyVanArrived } from './src/notifications';
 
 export default function App() {
@@ -41,7 +41,8 @@ export default function App() {
         quantity,
         options,
         total: product.price * quantity,
-        status: 'reserved',
+        status: product.fulfilmentType === 'ready_stock' ? 'ready' : 'reserved',
+        fulfilmentType: product.fulfilmentType,
       },
       ...current,
     ]);
@@ -52,7 +53,7 @@ export default function App() {
     if (!order || order.status === 'collected') return;
 
     const nextStatus = order.status === 'reserved'
-      ? 'preparing'
+      ? (order.fulfilmentType === 'ready_stock' ? 'ready' : 'preparing')
       : order.status === 'preparing'
         ? 'ready'
         : 'collected';
@@ -78,9 +79,12 @@ export default function App() {
   };
 
   const recordWalkUpSale = (productId: string) => {
+    const product = products.find((item) => item.id === productId);
+    if (product?.fulfilmentType !== 'ready_stock') return;
+
     setInventory((current) => {
       const stock = current[productId];
-      if (!stock || stock.physical <= stock.reserved) return current;
+      if (!stock || stock.walkUpBuffer <= 0 || stock.physical <= stock.reserved) return current;
 
       return {
         ...current,

@@ -73,6 +73,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
         category: 'cobs',
         image: 'build-your-own',
         custom: true,
+        fulfilmentType: 'made_to_order',
       },
       quantity,
       `Base: ${base.name}\nFillings: ${selectedFillings.map((item) => item.name).join(', ')}\nSauce: ${sauce}`,

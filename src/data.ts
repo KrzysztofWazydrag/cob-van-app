@@ -18,7 +18,10 @@ export type Product = {
   category: 'cobs' | 'wraps' | 'breakfast';
   image: ProductImage;
   custom?: boolean;
+  fulfilmentType: FulfilmentType;
 };
+
+export type FulfilmentType = 'ready_stock' | 'made_to_order';
 
 export type OrderStatus = 'reserved' | 'preparing' | 'ready' | 'collected';
 
@@ -33,6 +36,7 @@ export type Order = {
   options: string;
   total: number;
   status: OrderStatus;
+  fulfilmentType: FulfilmentType;
 };
 
 export type StockLevel = {
@@ -69,6 +73,7 @@ export const products: Product[] = [
     category: 'cobs',
     image: 'build-your-own',
     custom: true,
+    fulfilmentType: 'made_to_order',
   },
   {
     id: 'bacon-egg',
@@ -78,6 +83,7 @@ export const products: Product[] = [
     badge: 'MOST LOVED',
     category: 'cobs',
     image: 'bacon-egg-cob',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'sausage-egg',
@@ -86,6 +92,7 @@ export const products: Product[] = [
     price: 4.5,
     category: 'cobs',
     image: 'sausage-egg-cob',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'bacon-cheese-tomato',
@@ -94,6 +101,7 @@ export const products: Product[] = [
     price: 5.25,
     category: 'cobs',
     image: 'bacon-cheese-tomato-baguette',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'egg-mayo',
@@ -102,6 +110,7 @@ export const products: Product[] = [
     price: 3.5,
     category: 'cobs',
     image: 'egg-mayo-cob',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'breakfast-wrap',
@@ -111,6 +120,7 @@ export const products: Product[] = [
     badge: 'BEST VALUE',
     category: 'wraps',
     image: 'breakfast-wrap',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'veggie-wrap',
@@ -119,6 +129,7 @@ export const products: Product[] = [
     price: 5.25,
     category: 'wraps',
     image: 'veggie-breakfast-wrap',
+    fulfilmentType: 'ready_stock',
   },
   {
     id: 'small-english',
@@ -127,6 +138,7 @@ export const products: Product[] = [
     price: 6.5,
     category: 'breakfast',
     image: 'small-english-breakfast',
+    fulfilmentType: 'made_to_order',
   },
   {
     id: 'full-english',
@@ -136,12 +148,13 @@ export const products: Product[] = [
     badge: 'PROPER BREAKFAST',
     category: 'breakfast',
     image: 'full-english-breakfast',
+    fulfilmentType: 'made_to_order',
   },
 ];
 
 export const orders: Order[] = [
-  { id: '1', orderNumber: 104, customer: 'Jamie P.', initials: 'JP', productId: 'bacon-egg', itemName: 'Bacon & egg cob', quantity: 1, options: 'Brown sauce', total: 4.5, status: 'reserved' },
-  { id: '2', orderNumber: 105, customer: 'Mick S.', initials: 'MS', productId: 'sausage-egg', itemName: 'Sausage & egg cob', quantity: 2, options: 'Red sauce', total: 9, status: 'preparing' },
-  { id: '3', orderNumber: 106, customer: 'Sarah L.', initials: 'SL', productId: 'breakfast-wrap', itemName: 'Big breakfast wrap', quantity: 1, options: 'No sauce', total: 5.75, status: 'ready' },
-  { id: '4', orderNumber: 107, customer: 'Tom B.', initials: 'TB', productId: 'bacon-egg', itemName: 'Bacon & egg cob', quantity: 1, options: 'No sauce', total: 4.5, status: 'collected' },
+  { id: '1', orderNumber: 104, customer: 'Jamie P.', initials: 'JP', productId: 'bacon-egg', itemName: 'Bacon & egg cob', quantity: 1, options: 'Brown sauce', total: 4.5, status: 'ready', fulfilmentType: 'ready_stock' },
+  { id: '2', orderNumber: 105, customer: 'Mick S.', initials: 'MS', productId: 'sausage-egg', itemName: 'Sausage & egg cob', quantity: 2, options: 'Red sauce', total: 9, status: 'ready', fulfilmentType: 'ready_stock' },
+  { id: '3', orderNumber: 106, customer: 'Sarah L.', initials: 'SL', productId: 'breakfast-wrap', itemName: 'Big breakfast wrap', quantity: 1, options: 'No sauce', total: 5.75, status: 'ready', fulfilmentType: 'ready_stock' },
+  { id: '4', orderNumber: 107, customer: 'Tom B.', initials: 'TB', productId: 'bacon-egg', itemName: 'Bacon & egg cob', quantity: 1, options: 'No sauce', total: 4.5, status: 'collected', fulfilmentType: 'ready_stock' },
 ];
