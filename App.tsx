@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useReducer, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,15 +6,114 @@ import { CustomerScreen } from './src/screens/CustomerScreen';
 import { DriverScreen } from './src/screens/DriverScreen';
 import type { Role } from './src/components/RoleSwitch';
 import { colors } from './src/theme';
-import { initialInventory, orders as initialOrders, products, type Inventory, type Order, type Product } from './src/data';
+import {
+  initialBuildYourOwnPricing,
+  initialInventory,
+  orders as initialOrders,
+  products as initialProducts,
+  type BuildYourOwnPricing,
+  type Inventory,
+  type Order,
+  type Product,
+  type WalkUpSaleEvent,
+} from './src/data';
 import { notifyVanArrived } from './src/notifications';
+
+type StockState = {
+  inventory: Inventory;
+  walkUpSales: WalkUpSaleEvent[];
+};
+
+type StockAction =
+  | { type: 'reserve'; productId: string; quantity: number }
+  | { type: 'collect'; productId: string; quantity: number }
+  | { type: 'sellWalkUp'; event: WalkUpSaleEvent }
+  | { type: 'undoWalkUp'; eventId: string };
+
+const currentWorkplace = 'Acero';
+
+function stockReducer(state: StockState, action: StockAction): StockState {
+  if (action.type === 'undoWalkUp') {
+    const latestSale = state.walkUpSales[0];
+    if (!latestSale || latestSale.id !== action.eventId) return state;
+
+    const stock = state.inventory[latestSale.productId];
+    if (!stock) return state;
+
+    return {
+      inventory: {
+        ...state.inventory,
+        [latestSale.productId]: {
+          ...stock,
+          physical: stock.physical + latestSale.quantity,
+          walkUpBuffer: stock.walkUpBuffer + latestSale.quantity,
+        },
+      },
+      walkUpSales: state.walkUpSales.slice(1),
+    };
+  }
+
+  const productId = action.type === 'sellWalkUp' ? action.event.productId : action.productId;
+  const stock = state.inventory[productId];
+  if (!stock) return state;
+
+  if (action.type === 'reserve') {
+    if (stock.physical - stock.reserved - stock.walkUpBuffer < action.quantity) return state;
+    return {
+      ...state,
+      inventory: {
+        ...state.inventory,
+        [productId]: { ...stock, reserved: stock.reserved + action.quantity },
+      },
+    };
+  }
+
+  if (action.type === 'collect') {
+    return {
+      ...state,
+      inventory: {
+        ...state.inventory,
+        [productId]: {
+          ...stock,
+          physical: Math.max(stock.physical - action.quantity, 0),
+          reserved: Math.max(stock.reserved - action.quantity, 0),
+        },
+      },
+    };
+  }
+
+  if (stock.walkUpBuffer < action.event.quantity || stock.physical - stock.reserved < action.event.quantity) {
+    return state;
+  }
+
+  return {
+    inventory: {
+      ...state.inventory,
+      [productId]: {
+        ...stock,
+        physical: stock.physical - action.event.quantity,
+        walkUpBuffer: stock.walkUpBuffer - action.event.quantity,
+      },
+    },
+    walkUpSales: [action.event, ...state.walkUpSales],
+  };
+}
 
 export default function App() {
   const [role, setRole] = useState<Role>('customer');
-  const [inventory, setInventory] = useState<Inventory>(initialInventory);
+  const [{ inventory, walkUpSales }, dispatchStock] = useReducer(stockReducer, {
+    inventory: initialInventory,
+    walkUpSales: [],
+  });
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [buildPricing, setBuildPricing] = useState<BuildYourOwnPricing>(initialBuildYourOwnPricing);
   const [stopMode, setStopMode] = useState(false);
   const [favouriteIds, setFavouriteIds] = useState<string[]>(['bacon-egg', 'breakfast-wrap']);
+
+  const pricedProducts = useMemo(() => products.map((product) => (
+    product.custom ? { ...product, price: buildPricing.bases.Cob } : product
+  )), [buildPricing.bases.Cob, products]);
 
   const toggleFavourite = (productId: string) => {
     setFavouriteIds((current) => current.includes(productId)
@@ -23,13 +122,12 @@ export default function App() {
   };
 
   const reserveProduct = (product: Product, quantity: number, options: string) => {
+    const currentProduct = pricedProducts.find((item) => item.id === product.id);
     const stock = inventory[product.id];
-    if (!stock || stock.physical - stock.reserved - stock.walkUpBuffer < quantity) return;
+    if (!currentProduct?.available || !stock || stock.physical - stock.reserved - stock.walkUpBuffer < quantity) return;
+    const orderedProduct = product.custom ? product : currentProduct;
 
-    setInventory((current) => ({
-      ...current,
-      [product.id]: { ...current[product.id], reserved: current[product.id].reserved + quantity },
-    }));
+    dispatchStock({ productId: product.id, quantity, type: 'reserve' });
     setOrders((current) => [
       {
         id: `local-${Date.now()}`,
@@ -37,12 +135,12 @@ export default function App() {
         customer: 'Jamie P.',
         initials: 'JP',
         productId: product.id,
-        itemName: product.name,
+        itemName: orderedProduct.name,
         quantity,
         options,
-        total: product.price * quantity,
-        status: product.fulfilmentType === 'ready_stock' ? 'ready' : 'reserved',
-        fulfilmentType: product.fulfilmentType,
+        total: orderedProduct.price * quantity,
+        status: orderedProduct.fulfilmentType === 'ready_stock' ? 'ready' : 'reserved',
+        fulfilmentType: orderedProduct.fulfilmentType,
       },
       ...current,
     ]);
@@ -59,18 +157,7 @@ export default function App() {
         : 'collected';
 
     if (nextStatus === 'collected') {
-      setInventory((current) => {
-        const stock = current[order.productId];
-        if (!stock) return current;
-        return {
-          ...current,
-          [order.productId]: {
-            ...stock,
-            physical: Math.max(stock.physical - order.quantity, 0),
-            reserved: Math.max(stock.reserved - order.quantity, 0),
-          },
-        };
-      });
+      dispatchStock({ productId: order.productId, quantity: order.quantity, type: 'collect' });
     }
 
     setOrders((current) => current.map((item) => (
@@ -78,23 +165,27 @@ export default function App() {
     )));
   };
 
-  const recordWalkUpSale = (productId: string) => {
-    const product = products.find((item) => item.id === productId);
-    if (product?.fulfilmentType !== 'ready_stock') return;
+  const recordWalkUpSale = (productId: string, workplace: string) => {
+    const product = pricedProducts.find((item) => item.id === productId);
+    const stock = inventory[productId];
+    if (!product?.available || product.fulfilmentType !== 'ready_stock' || !stock || stock.walkUpBuffer <= 0 || stock.physical <= stock.reserved) return;
 
-    setInventory((current) => {
-      const stock = current[productId];
-      if (!stock || stock.walkUpBuffer <= 0 || stock.physical <= stock.reserved) return current;
-
-      return {
-        ...current,
-        [productId]: {
-          ...stock,
-          physical: stock.physical - 1,
-          walkUpBuffer: Math.max(stock.walkUpBuffer - 1, 0),
-        },
-      };
+    const timestamp = Math.max(Date.now(), (walkUpSales[0]?.timestamp ?? 0) + 1);
+    dispatchStock({
+      event: {
+        id: `${productId}-${timestamp}`,
+        productId,
+        productName: product.name,
+        quantity: 1,
+        timestamp,
+        workplace,
+      },
+      type: 'sellWalkUp',
     });
+  };
+
+  const undoWalkUpSale = (eventId: string) => {
+    dispatchStock({ eventId, type: 'undoWalkUp' });
   };
 
   const toggleStopMode = () => {
@@ -103,29 +194,44 @@ export default function App() {
     if (nextStopMode) void notifyVanArrived();
   };
 
+  const saveProductMenuSettings = (productId: string, price: number, available: boolean) => {
+    setProducts((current) => current.map((product) => (
+      product.id === productId ? { ...product, available, price } : product
+    )));
+  };
+
   return (
     <SafeAreaProvider>
       <View style={styles.app}>
         <StatusBar style={role === 'driver' ? 'light' : 'dark'} />
         {role === 'customer' ? (
           <CustomerScreen
+            buildPricing={buildPricing}
             favouriteIds={favouriteIds}
             inventory={inventory}
             onReserve={reserveProduct}
             onRolePress={() => setRole('driver')}
             onToggleFavourite={toggleFavourite}
             orders={orders}
+            products={pricedProducts}
             stopMode={stopMode}
           />
         ) : (
           <DriverScreen
+            buildPricing={buildPricing}
+            currentWorkplace={currentWorkplace}
             inventory={inventory}
             onAdvanceOrder={advanceOrder}
             onRolePress={() => setRole('customer')}
+            onSaveBuildPricing={setBuildPricing}
+            onSaveProduct={saveProductMenuSettings}
             onToggleStopMode={toggleStopMode}
+            onUndoWalkUpSale={undoWalkUpSale}
             onWalkUpSale={recordWalkUpSale}
             orders={orders}
+            products={pricedProducts}
             stopMode={stopMode}
+            walkUpSales={walkUpSales}
           />
         )}
       </View>

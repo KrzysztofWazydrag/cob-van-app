@@ -1,68 +1,59 @@
 import { useEffect, useState } from 'react';
 import { Image, type ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Product } from '../data';
+import {
+  buildBaseNames,
+  buildFillingNames,
+  type BuildBaseName,
+  type BuildFillingName,
+  type BuildYourOwnPricing,
+  type Product,
+} from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
-
-type BaseOption = {
-  name: 'Cob' | 'Baguette' | 'Wrap';
-  price: number;
-};
-
-type FillingOption = {
-  image: ImageSourcePropType;
-  name: 'Bacon' | 'Sausage' | 'Fried egg' | 'Hash brown' | 'Cheese' | 'Mushrooms' | 'Tomato' | 'Sweetcorn' | 'Cucumber' | 'Egg mayo';
-  price: number;
-};
 
 type BuildYourOwnModalProps = {
   available: number;
   onClose: () => void;
   onReserve: (product: Product, quantity: number, options: string) => void;
+  pricing: BuildYourOwnPricing;
   visible: boolean;
 };
 
-const bases: BaseOption[] = [
-  { name: 'Cob', price: 2.5 },
-  { name: 'Baguette', price: 3 },
-  { name: 'Wrap', price: 2.75 },
-];
-
-const fillings: FillingOption[] = [
-  { image: require('../../assets/ingredients/bacon.png'), name: 'Bacon', price: 1.25 },
-  { image: require('../../assets/ingredients/sausage.png'), name: 'Sausage', price: 1.25 },
-  { image: require('../../assets/ingredients/fried-egg.png'), name: 'Fried egg', price: 0.95 },
-  { image: require('../../assets/ingredients/hash-brown.png'), name: 'Hash brown', price: 0.75 },
-  { image: require('../../assets/ingredients/cheese.png'), name: 'Cheese', price: 0.8 },
-  { image: require('../../assets/ingredients/mushrooms.png'), name: 'Mushrooms', price: 0.65 },
-  { image: require('../../assets/ingredients/tomato.png'), name: 'Tomato', price: 0.5 },
-  { image: require('../../assets/ingredients/sweetcorn.png'), name: 'Sweetcorn', price: 0.5 },
-  { image: require('../../assets/ingredients/cucumber.png'), name: 'Cucumber', price: 0.5 },
-  { image: require('../../assets/ingredients/egg-mayo.png'), name: 'Egg mayo', price: 0.75 },
-];
+const fillingImages: Record<BuildFillingName, ImageSourcePropType> = {
+  Bacon: require('../../assets/ingredients/bacon.png'),
+  Cheese: require('../../assets/ingredients/cheese.png'),
+  Cucumber: require('../../assets/ingredients/cucumber.png'),
+  'Egg mayo': require('../../assets/ingredients/egg-mayo.png'),
+  'Fried egg': require('../../assets/ingredients/fried-egg.png'),
+  'Hash brown': require('../../assets/ingredients/hash-brown.png'),
+  Mushrooms: require('../../assets/ingredients/mushrooms.png'),
+  Sausage: require('../../assets/ingredients/sausage.png'),
+  Sweetcorn: require('../../assets/ingredients/sweetcorn.png'),
+  Tomato: require('../../assets/ingredients/tomato.png'),
+};
 
 const sauces = ['No sauce', 'Brown sauce', 'Red sauce'] as const;
 
-export function BuildYourOwnModal({ available, onClose, onReserve, visible }: BuildYourOwnModalProps) {
-  const [base, setBase] = useState<BaseOption>(bases[0]);
-  const [selectedFillings, setSelectedFillings] = useState<FillingOption[]>([]);
+export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visible }: BuildYourOwnModalProps) {
+  const [base, setBase] = useState<BuildBaseName>(buildBaseNames[0]);
+  const [selectedFillings, setSelectedFillings] = useState<BuildFillingName[]>([]);
   const [sauce, setSauce] = useState<(typeof sauces)[number]>(sauces[0]);
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (!visible) return;
-    setBase(bases[0]);
+    setBase(buildBaseNames[0]);
     setSelectedFillings([]);
     setSauce(sauces[0]);
     setQuantity(1);
   }, [visible]);
 
-  const unitPrice = base.price + selectedFillings.reduce((sum, filling) => sum + filling.price, 0);
+  const unitPrice = pricing.bases[base] + selectedFillings.reduce((sum, filling) => sum + pricing.fillings[filling], 0);
   const canReserve = available > 0 && selectedFillings.length > 0;
 
-  const toggleFilling = (filling: FillingOption) => {
-    setSelectedFillings((current) => current.some((item) => item.name === filling.name)
-      ? current.filter((item) => item.name !== filling.name)
+  const toggleFilling = (filling: BuildFillingName) => {
+    setSelectedFillings((current) => current.includes(filling)
+      ? current.filter((item) => item !== filling)
       : [...current, filling]);
   };
 
@@ -71,8 +62,9 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
 
     onReserve(
       {
+        available: true,
         id: 'build-your-own',
-        name: `Build your own ${base.name.toLowerCase()}`,
+        name: `Build your own ${base.toLowerCase()}`,
         description: 'Custom breakfast sandwich',
         price: unitPrice,
         category: 'cobs',
@@ -81,7 +73,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
         fulfilmentType: 'made_to_order',
       },
       quantity,
-      `Base: ${base.name}\nFillings: ${selectedFillings.map((item) => item.name).join(', ')}\nSauce: ${sauce}`,
+      `Base: ${base}\nFillings: ${selectedFillings.join(', ')}\nSauce: ${sauce}`,
     );
     onClose();
   };
@@ -102,37 +94,37 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.stepLabel}>1 · CHOOSE BASE</Text>
           <View style={styles.optionRow}>
-            {bases.map((item) => (
+            {buildBaseNames.map((item) => (
               <Pressable
                 accessibilityRole="radio"
-                accessibilityState={{ checked: base.name === item.name }}
-                key={item.name}
+                accessibilityState={{ checked: base === item }}
+                key={item}
                 onPress={() => setBase(item)}
-                style={[styles.baseChip, base.name === item.name && styles.optionActive]}
+                style={[styles.baseChip, base === item && styles.optionActive]}
               >
-                <Text style={[styles.optionName, base.name === item.name && styles.optionTextActive]}>{item.name}</Text>
-                <Text style={[styles.optionPrice, base.name === item.name && styles.optionTextActive]}>£{item.price.toFixed(2)}</Text>
+                <Text style={[styles.optionName, base === item && styles.optionTextActive]}>{item}</Text>
+                <Text style={[styles.optionPrice, base === item && styles.optionTextActive]}>£{pricing.bases[item].toFixed(2)}</Text>
               </Pressable>
             ))}
           </View>
 
           <Text style={styles.stepLabel}>2 · CHOOSE FILLINGS</Text>
           <View style={styles.fillingGrid}>
-            {fillings.map((item) => {
-              const active = selectedFillings.some((selected) => selected.name === item.name);
+            {buildFillingNames.map((item) => {
+              const active = selectedFillings.includes(item);
               return (
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: active }}
-                  key={item.name}
+                  key={item}
                   onPress={() => toggleFilling(item)}
                   style={[styles.fillingChip, active && styles.optionActive]}
                 >
                   <View style={styles.fillingCopy}>
-                    <Text numberOfLines={1} style={[styles.optionName, active && styles.optionTextActive]}>{active ? '✓  ' : ''}{item.name}</Text>
-                    <Text style={[styles.optionPrice, active && styles.optionTextActive]}>+£{item.price.toFixed(2)}</Text>
+                    <Text numberOfLines={1} style={[styles.optionName, active && styles.optionTextActive]}>{active ? '✓  ' : ''}{item}</Text>
+                    <Text style={[styles.optionPrice, active && styles.optionTextActive]}>+£{pricing.fillings[item].toFixed(2)}</Text>
                   </View>
-                  <Image accessibilityIgnoresInvertColors source={item.image} style={styles.fillingImage} />
+                  <Image accessibilityIgnoresInvertColors source={fillingImages[item]} style={styles.fillingImage} />
                 </Pressable>
               );
             })}
@@ -157,13 +149,13 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
             <View style={styles.summaryHeading}>
               <View>
                 <Text style={styles.summaryLabel}>YOUR ORDER</Text>
-                <Text style={styles.summaryTitle}>Build your own {base.name.toLowerCase()}</Text>
+                <Text style={styles.summaryTitle}>Build your own {base.toLowerCase()}</Text>
               </View>
               <Text style={styles.summaryPrice}>£{unitPrice.toFixed(2)}</Text>
             </View>
-            <Text style={styles.summaryLine}>Base: {base.name}</Text>
+            <Text style={styles.summaryLine}>Base: {base}</Text>
             <Text style={styles.summaryLine}>
-              Fillings: {selectedFillings.length > 0 ? selectedFillings.map((item) => item.name).join(', ') : 'Choose at least one'}
+              Fillings: {selectedFillings.length > 0 ? selectedFillings.join(', ') : 'Choose at least one'}
             </Text>
             <Text style={styles.summaryLine}>Sauce: {sauce}</Text>
           </View>

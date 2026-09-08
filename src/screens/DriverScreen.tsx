@@ -1,17 +1,25 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { products, reservableCount, type Inventory, type Order, type OrderStatus } from '../data';
+import { MenuPricesModal } from '../components/MenuPricesModal';
+import { reservableCount, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product, type WalkUpSaleEvent } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type DriverScreenProps = {
+  buildPricing: BuildYourOwnPricing;
+  currentWorkplace: string;
   inventory: Inventory;
   onAdvanceOrder: (orderId: string) => void;
   onRolePress: () => void;
+  onSaveBuildPricing: (pricing: BuildYourOwnPricing) => void;
+  onSaveProduct: (productId: string, price: number, available: boolean) => void;
   onToggleStopMode: () => void;
-  onWalkUpSale: (productId: string) => void;
+  onUndoWalkUpSale: (eventId: string) => void;
+  onWalkUpSale: (productId: string, workplace: string) => void;
   orders: Order[];
+  products: Product[];
   stopMode: boolean;
+  walkUpSales: WalkUpSaleEvent[];
 };
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -28,11 +36,20 @@ const actionLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleStopMode, onWalkUpSale, orders, stopMode }: DriverScreenProps) {
+const timeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
+export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdvanceOrder, onRolePress, onSaveBuildPricing, onSaveProduct, onToggleStopMode, onUndoWalkUpSale, onWalkUpSale, orders, products, stopMode, walkUpSales }: DriverScreenProps) {
   const [tab, setTab] = useState<'orders' | 'stock'>('orders');
+  const [menuPricesOpen, setMenuPricesOpen] = useState(false);
   const readyCount = orders.filter((order) => order.status === 'ready').length;
   const totalRevenue = useMemo(() => orders.reduce((sum, order) => sum + order.total, 0), [orders]);
   const reservedItems = Object.values(inventory).reduce((sum, stock) => sum + stock.reserved, 0);
+  const latestSale = walkUpSales[0];
+  const recentSales = walkUpSales.filter((sale) => sale.workplace === currentWorkplace).slice(0, 3);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
@@ -51,7 +68,7 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
           <View style={styles.stopTop}>
             <View style={styles.stopNumber}><Text style={styles.stopNumberText}>3</Text></View>
             <View style={styles.stopCopy}>
-              <Text style={styles.stopName}>Acero</Text>
+              <Text style={styles.stopName}>{currentWorkplace}</Text>
               <Text style={styles.stopAddress}>Manton Lane · 1.8 miles</Text>
             </View>
             <View style={styles.etaBox}>
@@ -93,6 +110,19 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
           </View>
         </View>
 
+        <Pressable
+          accessibilityLabel="Open Menu and prices"
+          onPress={() => setMenuPricesOpen(true)}
+          style={({ pressed }) => [styles.menuButton, pressed && styles.menuButtonPressed]}
+        >
+          <View style={styles.menuButtonIcon}><Text style={styles.menuButtonIconText}>£</Text></View>
+          <View style={styles.menuButtonCopy}>
+            <Text style={styles.menuButtonTitle}>Menu & prices</Text>
+            <Text style={styles.menuButtonHint}>Prices and availability</Text>
+          </View>
+          <Text style={styles.menuButtonArrow}>›</Text>
+        </Pressable>
+
         <View style={styles.segmented}>
           <Pressable onPress={() => setTab('orders')} style={[styles.segment, tab === 'orders' && styles.segmentActive]}>
             <Text style={[styles.segmentText, tab === 'orders' && styles.segmentTextActive]}>Orders</Text>
@@ -105,7 +135,7 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
         {tab === 'orders' ? (
           <View>
             <View style={styles.listHeading}>
-              <Text style={styles.listTitle}>ACERO · {orders.length} orders</Text>
+              <Text style={styles.listTitle}>{currentWorkplace.toUpperCase()} · {orders.length} orders</Text>
               <Text style={styles.listHint}>Current stop</Text>
             </View>
             <View style={styles.orderList}>
@@ -153,14 +183,36 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
         ) : (
           <View>
             <View style={styles.listHeading}>
-              <Text style={styles.listTitle}>Stock for Acero</Text>
+              <Text style={styles.listTitle}>Stock for {currentWorkplace}</Text>
               <Text style={styles.listHint}>Physical stock split</Text>
             </View>
-            <View style={styles.stockList}>
+            {recentSales.length > 0 ? (
+              <View style={styles.recentSales}>
+                <Text style={styles.recentSalesTitle}>Recent sales</Text>
+                {recentSales.map((sale, index) => (
+                  <View key={sale.id} style={[styles.recentSaleRow, index > 0 && styles.recentSaleDivider]}>
+                    <Text numberOfLines={2} style={styles.recentSaleText}>
+                      {sale.quantity > 1 ? `${sale.quantity}× ` : ''}{sale.productName} · {sale.workplace} · {timeFormatter.format(sale.timestamp)}
+                    </Text>
+                    {sale.id === latestSale?.id ? (
+                      <Pressable
+                        accessibilityLabel={`Undo sale of ${sale.productName}`}
+                        accessibilityRole="button"
+                        onPress={() => onUndoWalkUpSale(sale.id)}
+                        style={({ pressed }) => [styles.undoButton, pressed && styles.undoButtonPressed]}
+                      >
+                        <Text style={styles.undoText}>Undo</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <View style={[styles.stockList, recentSales.length > 0 && styles.stockListAfterRecent]}>
               {products.filter((product) => product.fulfilmentType === 'ready_stock').map((product) => {
                 const stock = inventory[product.id];
                 const walkUpAvailable = Math.min(stock.walkUpBuffer, stock.physical - stock.reserved);
-                const canSellWalkUp = stopMode && walkUpAvailable > 0;
+                const canSellWalkUp = product.available && stopMode && walkUpAvailable > 0;
 
                 return (
                   <View key={product.id} style={styles.stockCard}>
@@ -191,13 +243,18 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
                       accessibilityLabel={`Record one walk-up sale of ${product.name}`}
                       accessibilityState={{ disabled: !canSellWalkUp }}
                       disabled={!canSellWalkUp}
-                      onPress={() => onWalkUpSale(product.id)}
+                      onPress={() => onWalkUpSale(product.id, currentWorkplace)}
                       style={[styles.quickSaleButton, !canSellWalkUp && styles.quickSaleButtonDisabled]}
                     >
                       <Text style={[styles.quickSaleText, !canSellWalkUp && styles.quickSaleTextDisabled]}>
-                        {stopMode ? (walkUpAvailable > 0 ? '−1  Walk-up sold' : 'Walk-up allocation sold') : 'Available after arrival'}
+                        {!product.available ? 'Unavailable in menu' : stopMode ? (walkUpAvailable > 0 ? 'Sell 1' : 'Walk-up stock sold out') : 'Available after arrival'}
                       </Text>
                     </Pressable>
+                    {latestSale?.productId === product.id && latestSale.workplace === currentWorkplace ? (
+                      <Text accessibilityLiveRegion="polite" style={styles.saleFeedback}>
+                        ✓ Sold {latestSale.quantity} · {latestSale.workplace} · {timeFormatter.format(latestSale.timestamp)}
+                      </Text>
+                    ) : null}
                   </View>
                 );
               })}
@@ -220,6 +277,14 @@ export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleS
           </View>
         </View>
       </ScrollView>
+      <MenuPricesModal
+        buildPricing={buildPricing}
+        onClose={() => setMenuPricesOpen(false)}
+        onSaveBuildPricing={onSaveBuildPricing}
+        onSaveProduct={onSaveProduct}
+        products={products}
+        visible={menuPricesOpen}
+      />
     </SafeAreaView>
   );
 }
@@ -261,6 +326,14 @@ const styles = StyleSheet.create({
   statValue: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
   greenText: { color: colors.green },
   statLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.7, marginTop: spacing.xs },
+  menuButton: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.md, flexDirection: 'row', marginBottom: spacing.lg, minHeight: spacing.xxxl * 2, padding: spacing.md, ...shadow },
+  menuButtonPressed: { opacity: 0.82 },
+  menuButtonIcon: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, height: spacing.xxxl + spacing.sm, justifyContent: 'center', width: spacing.xxxl + spacing.sm },
+  menuButtonIconText: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
+  menuButtonCopy: { flex: 1, marginLeft: spacing.md },
+  menuButtonTitle: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
+  menuButtonHint: { color: colors.muted, fontSize: type.tiny, marginTop: spacing.xs },
+  menuButtonArrow: { color: colors.orange, fontSize: type.hero, fontWeight: '900' },
   segmented: { backgroundColor: colors.line, borderRadius: radius.md, flexDirection: 'row', marginBottom: spacing.xl, padding: spacing.xs },
   segment: { alignItems: 'center', borderRadius: radius.sm, flex: 1, minHeight: 42, justifyContent: 'center' },
   segmentActive: { backgroundColor: colors.paper, ...shadow },
@@ -298,6 +371,7 @@ const styles = StyleSheet.create({
   orderActionText: { color: colors.paper, fontSize: type.label, fontWeight: '900' },
   orderActionTextDisabled: { color: colors.muted },
   stockList: { gap: spacing.md },
+  stockListAfterRecent: { marginTop: spacing.lg },
   stockCard: { backgroundColor: colors.paper, borderRadius: radius.md, padding: spacing.lg },
   stockTopRow: { alignItems: 'center', flexDirection: 'row' },
   stockName: { flex: 1 },
@@ -314,6 +388,15 @@ const styles = StyleSheet.create({
   quickSaleButtonDisabled: { backgroundColor: colors.line },
   quickSaleText: { color: colors.paper, fontSize: type.label, fontWeight: '900' },
   quickSaleTextDisabled: { color: colors.muted },
+  saleFeedback: { color: colors.green, fontSize: type.tiny, fontWeight: '900', marginTop: spacing.sm, textAlign: 'center' },
+  recentSales: { backgroundColor: colors.paper, borderRadius: radius.md, padding: spacing.lg },
+  recentSalesTitle: { color: colors.ink, fontSize: type.body, fontWeight: '900', marginBottom: spacing.sm },
+  recentSaleRow: { alignItems: 'center', flexDirection: 'row', minHeight: 48 },
+  recentSaleDivider: { borderTopColor: colors.line, borderTopWidth: 1 },
+  recentSaleText: { color: colors.muted, flex: 1, fontSize: type.tiny, lineHeight: spacing.lg },
+  undoButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.sm, justifyContent: 'center', marginLeft: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md },
+  undoButtonPressed: { backgroundColor: colors.mustardDark },
+  undoText: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
   insightCard: { alignItems: 'center', backgroundColor: colors.greenSoft, borderRadius: radius.md, flexDirection: 'row', marginTop: spacing.lg, padding: spacing.lg },
   insightIcon: { color: colors.green, fontSize: type.hero, fontWeight: '900' },
   insightCopy: { flex: 1, marginLeft: spacing.md },

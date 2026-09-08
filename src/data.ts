@@ -13,6 +13,7 @@ export type ProductImage =
   | 'full-english-breakfast';
 
 export type Product = {
+  available: boolean;
   id: string;
   name: string;
   description: string;
@@ -22,6 +23,44 @@ export type Product = {
   image: ProductImage;
   custom?: boolean;
   fulfilmentType: FulfilmentType;
+};
+
+export const buildBaseNames = ['Cob', 'Baguette', 'Wrap'] as const;
+export const buildFillingNames = [
+  'Bacon',
+  'Sausage',
+  'Fried egg',
+  'Hash brown',
+  'Cheese',
+  'Mushrooms',
+  'Tomato',
+  'Sweetcorn',
+  'Cucumber',
+  'Egg mayo',
+] as const;
+
+export type BuildBaseName = (typeof buildBaseNames)[number];
+export type BuildFillingName = (typeof buildFillingNames)[number];
+
+export type BuildYourOwnPricing = {
+  bases: Record<BuildBaseName, number>;
+  fillings: Record<BuildFillingName, number>;
+};
+
+export const initialBuildYourOwnPricing: BuildYourOwnPricing = {
+  bases: { Baguette: 3, Cob: 2.5, Wrap: 2.75 },
+  fillings: {
+    Bacon: 1.25,
+    Cheese: 0.8,
+    Cucumber: 0.5,
+    'Egg mayo': 0.75,
+    'Fried egg': 0.95,
+    'Hash brown': 0.75,
+    Mushrooms: 0.65,
+    Sausage: 1.25,
+    Sweetcorn: 0.5,
+    Tomato: 0.5,
+  },
 };
 
 export type FulfilmentType = 'ready_stock' | 'made_to_order';
@@ -50,6 +89,15 @@ export type StockLevel = {
 
 export type Inventory = Record<string, StockLevel>;
 
+export type WalkUpSaleEvent = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  workplace: string;
+  timestamp: number;
+};
+
 export const initialInventory: Inventory = {
   'build-your-own': { physical: 10, reserved: 0, walkUpBuffer: 2 },
   'bacon-egg': { physical: 8, reserved: 1, walkUpBuffer: 3 },
@@ -71,6 +119,7 @@ export function reservableCount(stock: StockLevel) {
 
 export const products: Product[] = [
   {
+    available: true,
     id: 'build-your-own',
     name: 'Build your own',
     description: 'Choose your bread, fillings and sauce',
@@ -82,6 +131,7 @@ export const products: Product[] = [
     fulfilmentType: 'made_to_order',
   },
   {
+    available: true,
     id: 'bacon-egg',
     name: 'Bacon & egg cob',
     description: 'Crispy bacon, fried egg, soft white cob',
@@ -92,6 +142,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'sausage-egg',
     name: 'Sausage & egg cob',
     description: 'Two pork sausages, fried egg',
@@ -101,6 +152,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'bacon-cheese-tomato',
     name: 'Bacon, cheese & tomato baguette',
     description: 'Back bacon, melted cheddar, tomato',
@@ -110,6 +162,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'coronation-chicken',
     name: 'Coronation chicken sandwich',
     description: 'Curried chicken, sultanas and fresh leaves',
@@ -119,6 +172,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'ham-cheese-toastie',
     name: 'Ham & cheese toastie',
     description: 'Sliced ham and melted cheddar on toasted bread',
@@ -128,6 +182,7 @@ export const products: Product[] = [
     fulfilmentType: 'made_to_order',
   },
   {
+    available: true,
     id: 'tuna-mayo',
     name: 'Tuna mayo cob',
     description: 'Tuna mayonnaise and crisp lettuce',
@@ -137,6 +192,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'egg-mayo',
     name: 'Egg mayo cob',
     description: 'Egg mayo, cress, soft white cob',
@@ -146,6 +202,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'breakfast-wrap',
     name: 'Big breakfast wrap',
     description: 'Bacon, sausage, egg, cheese, hash brown',
@@ -156,6 +213,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'veggie-wrap',
     name: 'Veggie breakfast wrap',
     description: 'Egg, cheese, hash brown, mushrooms',
@@ -165,6 +223,7 @@ export const products: Product[] = [
     fulfilmentType: 'ready_stock',
   },
   {
+    available: true,
     id: 'small-english',
     name: 'Small English breakfast',
     description: 'Bacon, sausage, egg, hash brown, beans, toast',
@@ -174,6 +233,7 @@ export const products: Product[] = [
     fulfilmentType: 'made_to_order',
   },
   {
+    available: true,
     id: 'full-english',
     name: 'Full English breakfast',
     description: '2 bacon, 2 sausage, 2 egg, hash browns, beans, tomato, mushrooms & toast',

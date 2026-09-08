@@ -13,16 +13,18 @@ import { BuildYourOwnModal } from '../components/BuildYourOwnModal';
 import { FoodImage } from '../components/FoodImage';
 import { InVanStockModal } from '../components/InVanStockModal';
 import { VanTrackingModal } from '../components/VanTrackingModal';
-import { products, reservableCount, type Inventory, type Order, type OrderStatus, type Product } from '../data';
+import { reservableCount, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type CustomerScreenProps = {
+  buildPricing: BuildYourOwnPricing;
   favouriteIds: string[];
   inventory: Inventory;
   onReserve: (product: Product, quantity: number, options: string) => void;
   onRolePress: () => void;
   onToggleFavourite: (productId: string) => void;
   orders: Order[];
+  products: Product[];
   stopMode: boolean;
 };
 
@@ -42,7 +44,7 @@ const statusLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress, onToggleFavourite, orders, stopMode }: CustomerScreenProps) {
+export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserve, onRolePress, onToggleFavourite, orders, products, stopMode }: CustomerScreenProps) {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Product | null>(null);
   const [sauce, setSauce] = useState(sauces[0]);
@@ -70,13 +72,13 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
   };
 
   const totalAvailable = products.reduce(
-    (sum, product) => sum + reservableCount(inventory[product.id]),
+    (sum, product) => sum + (product.available ? reservableCount(inventory[product.id]) : 0),
     0,
   );
 
   const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
-  const visibleProducts = products.filter((product) => product.category === category);
-  const favouriteProducts = products.filter((product) => !product.custom && favouriteIds.includes(product.id));
+  const visibleProducts = products.filter((product) => product.available && product.category === category);
+  const favouriteProducts = products.filter((product) => product.available && !product.custom && favouriteIds.includes(product.id));
   const customerOrders = orders.filter((order) => order.customer === 'Jamie P.');
 
   const renderProductCard = (product: Product) => {
@@ -376,6 +378,7 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
           onReserve(product, customQuantity, options);
           setReserved(true);
         }}
+        pricing={buildPricing}
         visible={building}
       />
       <InVanStockModal
@@ -385,6 +388,7 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
           openProduct(product);
         }}
         onClose={() => setInVanStock(false)}
+        products={products}
         visible={inVanStock}
       />
       <VanTrackingModal onClose={() => setTracking(false)} visible={tracking} />

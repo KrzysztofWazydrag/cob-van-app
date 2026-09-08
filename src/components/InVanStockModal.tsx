@@ -1,6 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { products, reservableCount, type Inventory, type Product } from '../data';
+import { reservableCount, type Inventory, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 import { FoodImage } from './FoodImage';
 
@@ -8,12 +8,13 @@ type InVanStockModalProps = {
   inventory: Inventory;
   onChoose: (product: Product) => void;
   onClose: () => void;
+  products: Product[];
   visible: boolean;
 };
 
-export function InVanStockModal({ inventory, onChoose, onClose, visible }: InVanStockModalProps) {
+export function InVanStockModal({ inventory, onChoose, onClose, products, visible }: InVanStockModalProps) {
   const readyStock = products.filter(
-    (product) => product.fulfilmentType === 'ready_stock' && reservableCount(inventory[product.id]) > 0,
+    (product) => product.available && product.fulfilmentType === 'ready_stock' && reservableCount(inventory[product.id]) > 0,
   );
 
   return (
@@ -34,7 +35,9 @@ export function InVanStockModal({ inventory, onChoose, onClose, visible }: InVan
           {readyStock.length > 0 ? (
             <View style={styles.list}>
               {readyStock.map((product) => {
-                const available = reservableCount(inventory[product.id]);
+                const stock = inventory[product.id];
+                const available = reservableCount(stock);
+                const inVanAvailable = Math.max(stock.physical - stock.reserved, 0);
 
                 return (
                   <View key={product.id} style={styles.card}>
@@ -42,7 +45,7 @@ export function InVanStockModal({ inventory, onChoose, onClose, visible }: InVan
                     <View style={styles.itemCopy}>
                       <Text style={styles.itemName}>{product.name}</Text>
                       <Text style={styles.price}>£{product.price.toFixed(2)}</Text>
-                      <Text style={styles.available}>{available} available</Text>
+                      <Text style={styles.available}>{inVanAvailable} in van · {available} to reserve</Text>
                     </View>
                     <Pressable
                       accessibilityLabel={`Reserve ${product.name}, ${available} available`}
