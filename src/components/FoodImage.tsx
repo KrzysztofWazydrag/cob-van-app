@@ -3,15 +3,27 @@ import { radius } from '../theme';
 import type { Product } from '../data';
 
 type FoodImageProps = {
-  crop: Product['crop'];
+  image: Product['image'];
   style?: ImageStyle;
 };
 
-export function FoodImage({ crop, style }: FoodImageProps) {
+const sources = {
+  'build-your-own': require('../../assets/build-your-own.png'),
+  'bacon-egg-cob': require('../../assets/bacon-egg-cob.png'),
+  'sausage-egg-cob': require('../../assets/sausage-egg-cob.png'),
+  'bacon-cheese-tomato-baguette': require('../../assets/bacon-cheese-tomato-baguette.png'),
+  'egg-mayo-cob': require('../../assets/egg-mayo-cob.png'),
+  'breakfast-wrap': require('../../assets/breakfast-wrap.png'),
+  'veggie-breakfast-wrap': require('../../assets/veggie-breakfast-wrap.png'),
+  'small-english-breakfast': require('../../assets/small-english-breakfast.png'),
+  'full-english-breakfast': require('../../assets/full-english-box.png'),
+};
+
+export function FoodImage({ image, style }: FoodImageProps) {
   return (
     <Image
-      accessibilityLabel={`${crop} cob product photo`}
-      source={require('../../assets/cob-selection.png')}
+      accessibilityLabel={`${image} product photo`}
+      source={sources[image]}
       resizeMode="cover"
       style={[styles.image, style]}
     />

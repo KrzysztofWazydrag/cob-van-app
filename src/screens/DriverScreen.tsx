@@ -1,30 +1,41 @@
 import { useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { orders as initialOrders, products } from '../data';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { products, reservableCount, type Inventory, type Order, type OrderStatus } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type DriverScreenProps = {
+  inventory: Inventory;
+  onAdvanceOrder: (orderId: string) => void;
   onRolePress: () => void;
+  onToggleStopMode: () => void;
+  onWalkUpSale: (productId: string) => void;
+  orders: Order[];
+  stopMode: boolean;
 };
 
-export function DriverScreen({ onRolePress }: DriverScreenProps) {
-  const [readyIds, setReadyIds] = useState(() => new Set(initialOrders.filter((order) => order.status === 'ready').map((order) => order.id)));
-  const [tab, setTab] = useState<'orders' | 'stock'>('orders');
-  const [arrived, setArrived] = useState(false);
-  const readyCount = readyIds.size;
-  const totalRevenue = useMemo(() => initialOrders.reduce((sum, order) => sum + order.total, 0), []);
+const statusLabels: Record<OrderStatus, string> = {
+  reserved: 'Reserved',
+  preparing: 'Preparing',
+  ready: 'Ready',
+  collected: 'Collected',
+};
 
-  const toggleReady = (id: string) => {
-    setReadyIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+const actionLabels: Record<OrderStatus, string> = {
+  reserved: 'Start preparing',
+  preparing: 'Mark ready',
+  ready: 'Hand over',
+  collected: 'Collected',
+};
+
+export function DriverScreen({ inventory, onAdvanceOrder, onRolePress, onToggleStopMode, onWalkUpSale, orders, stopMode }: DriverScreenProps) {
+  const [tab, setTab] = useState<'orders' | 'stock'>('orders');
+  const readyCount = orders.filter((order) => order.status === 'ready').length;
+  const totalRevenue = useMemo(() => orders.reduce((sum, order) => sum + order.total, 0), [orders]);
+  const reservedItems = Object.values(inventory).reduce((sum, stock) => sum + stock.reserved, 0);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>THE COB VAN · MONDAY</Text>
@@ -51,15 +62,25 @@ export function DriverScreen({ onRolePress }: DriverScreenProps) {
           <View style={styles.progressTrack}><View style={styles.progressFill} /></View>
           <View style={styles.stopActions}>
             <Pressable style={styles.navigateButton}><Text style={styles.navigateText}>↗  Navigate</Text></Pressable>
-            <Pressable onPress={() => setArrived(!arrived)} style={[styles.arrivedButton, arrived && styles.arrivedButtonDone]}>
-              <Text style={[styles.arrivedText, arrived && styles.arrivedTextDone]}>{arrived ? '✓ Arrived' : 'Mark arrived'}</Text>
+            <Pressable onPress={onToggleStopMode} style={[styles.arrivedButton, stopMode && styles.arrivedButtonDone]}>
+              <Text style={[styles.arrivedText, stopMode && styles.arrivedTextDone]}>{stopMode ? '✓ Stop mode' : 'Mark arrived'}</Text>
             </Pressable>
           </View>
         </View>
 
+        {stopMode ? (
+          <View style={styles.modeBanner}>
+            <View style={styles.modeDot} />
+            <View style={styles.modeCopy}>
+              <Text style={styles.modeTitle}>Stop Mode is live</Text>
+              <Text style={styles.modeBody}>Walk-up buffer is protected. Record counter sales with one tap.</Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{initialOrders.length}</Text>
+            <Text style={styles.statValue}>{orders.length}</Text>
             <Text style={styles.statLabel}>ORDERS</Text>
           </View>
           <View style={styles.statCard}>
@@ -67,7 +88,7 @@ export function DriverScreen({ onRolePress }: DriverScreenProps) {
             <Text style={styles.statLabel}>RESERVED</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={[styles.statValue, styles.greenText]}>{readyCount}/{initialOrders.length}</Text>
+            <Text style={[styles.statValue, styles.greenText]}>{readyCount}/{orders.length}</Text>
             <Text style={styles.statLabel}>READY</Text>
           </View>
         </View>
@@ -84,24 +105,44 @@ export function DriverScreen({ onRolePress }: DriverScreenProps) {
         {tab === 'orders' ? (
           <View>
             <View style={styles.listHeading}>
-              <Text style={styles.listTitle}>Acero orders</Text>
-              <Text style={styles.listHint}>Tap when packed</Text>
+              <Text style={styles.listTitle}>ACERO · {orders.length} orders</Text>
+              <Text style={styles.listHint}>Current stop</Text>
             </View>
             <View style={styles.orderList}>
-              {initialOrders.map((order, index) => {
-                const isReady = readyIds.has(order.id);
+              {orders.map((order) => {
+                const isCollected = order.status === 'collected';
+                const isReady = order.status === 'ready';
                 return (
-                  <Pressable key={order.id} onPress={() => toggleReady(order.id)} style={[styles.orderCard, isReady && styles.orderCardReady]}>
-                    <View style={[styles.initials, isReady && styles.initialsReady]}><Text style={[styles.initialsText, isReady && styles.initialsTextReady]}>{order.initials}</Text></View>
-                    <View style={styles.orderCopy}>
-                      <View style={styles.orderNameRow}>
-                        <Text style={styles.orderName}>{order.customer}</Text>
-                        <Text style={styles.orderNumber}>#{104 + index}</Text>
+                  <View key={order.id} style={[styles.orderCard, isReady && styles.orderCardReady, isCollected && styles.orderCardCollected]}>
+                    <View style={styles.orderMainRow}>
+                      <View style={[styles.initials, isReady && styles.initialsReady]}>
+                        <Text style={[styles.initialsText, isReady && styles.initialsTextReady]}>{order.initials}</Text>
                       </View>
-                      <Text style={styles.orderItems}>{order.items}</Text>
+                      <View style={styles.orderCopy}>
+                        <View style={styles.orderNameRow}>
+                          <Text style={styles.orderName}>{order.customer}</Text>
+                          <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
+                        </View>
+                        <Text style={styles.orderItems}>{order.quantity}× {order.itemName}</Text>
+                        <Text style={styles.orderOptions}>{order.options}</Text>
+                      </View>
+                      <Text style={styles.orderPrice}>£{order.total.toFixed(2)}</Text>
                     </View>
-                    <View style={[styles.check, isReady && styles.checkReady]}><Text style={[styles.checkText, isReady && styles.checkTextReady]}>{isReady ? '✓' : ''}</Text></View>
-                  </Pressable>
+                    <View style={styles.orderActionRow}>
+                      <View style={[styles.statusPill, styles[`status_${order.status}`]]}>
+                        <Text style={[styles.statusText, order.status === 'ready' && styles.statusTextReady]}>{statusLabels[order.status]}</Text>
+                      </View>
+                      <Pressable
+                        accessibilityLabel={`${actionLabels[order.status]} for order ${order.orderNumber}`}
+                        accessibilityState={{ disabled: isCollected }}
+                        disabled={isCollected}
+                        onPress={() => onAdvanceOrder(order.id)}
+                        style={[styles.orderActionButton, isCollected && styles.orderActionButtonDisabled]}
+                      >
+                        <Text style={[styles.orderActionText, isCollected && styles.orderActionTextDisabled]}>{actionLabels[order.status]}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 );
               })}
             </View>
@@ -110,28 +151,59 @@ export function DriverScreen({ onRolePress }: DriverScreenProps) {
           <View>
             <View style={styles.listHeading}>
               <Text style={styles.listTitle}>Stock for Acero</Text>
-              <Text style={styles.listHint}>Reserved + walk-in</Text>
+              <Text style={styles.listHint}>Physical stock split</Text>
             </View>
-            <View style={styles.stockHeader}>
-              <Text style={[styles.stockHeaderText, styles.stockName]}>ITEM</Text>
-              <Text style={styles.stockHeaderText}>RESERVED</Text>
-              <Text style={styles.stockHeaderText}>WALK-IN</Text>
+            <View style={styles.stockList}>
+              {products.map((product) => {
+                const stock = inventory[product.id];
+                const walkUpAvailable = Math.min(stock.walkUpBuffer, stock.physical - stock.reserved);
+                const canSellWalkUp = stopMode && walkUpAvailable > 0;
+
+                return (
+                  <View key={product.id} style={styles.stockCard}>
+                    <View style={styles.stockTopRow}>
+                      <View style={styles.stockName}>
+                        <Text style={styles.stockItem}>{product.name}</Text>
+                        <Text style={styles.stockTotal}>{stock.physical} physically in van</Text>
+                      </View>
+                      <View style={[styles.stockHealth, reservableCount(stock) <= 2 && styles.stockHealthLow]}>
+                        <Text style={styles.stockHealthText}>{reservableCount(stock) <= 2 ? 'LOW' : 'HEALTHY'}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.stockMetrics}>
+                      <View style={styles.stockMetric}>
+                        <Text style={styles.stockMetricValue}>{stock.reserved}</Text>
+                        <Text style={styles.stockMetricLabel}>RESERVED</Text>
+                      </View>
+                      <View style={styles.stockMetric}>
+                        <Text style={styles.stockMetricValue}>{reservableCount(stock)}</Text>
+                        <Text style={styles.stockMetricLabel}>ONLINE</Text>
+                      </View>
+                      <View style={styles.stockMetric}>
+                        <Text style={styles.stockMetricValue}>{walkUpAvailable}</Text>
+                        <Text style={styles.stockMetricLabel}>WALK-UP</Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      accessibilityLabel={`Record one walk-up sale of ${product.name}`}
+                      accessibilityState={{ disabled: !canSellWalkUp }}
+                      disabled={!canSellWalkUp}
+                      onPress={() => onWalkUpSale(product.id)}
+                      style={[styles.quickSaleButton, !canSellWalkUp && styles.quickSaleButtonDisabled]}
+                    >
+                      <Text style={[styles.quickSaleText, !canSellWalkUp && styles.quickSaleTextDisabled]}>
+                        {stopMode ? (walkUpAvailable > 0 ? '−1  Walk-up sold' : 'Walk-up allocation sold') : 'Available after arrival'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
             </View>
-            {products.map((product, index) => (
-              <View key={product.id} style={styles.stockRow}>
-                <View style={styles.stockName}>
-                  <Text style={styles.stockItem}>{product.name}</Text>
-                  <Text style={styles.stockTotal}>{product.stock + [12, 9, 5][index]} total</Text>
-                </View>
-                <View style={styles.reservedCount}><Text style={styles.reservedCountText}>{[12, 9, 5][index]}</Text></View>
-                <View style={styles.walkInCount}><Text style={styles.walkInCountText}>{product.stock}</Text></View>
-              </View>
-            ))}
             <View style={styles.insightCard}>
               <Text style={styles.insightIcon}>↘</Text>
               <View style={styles.insightCopy}>
                 <Text style={styles.insightTitle}>Less guesswork today</Text>
-                <Text style={styles.insightBody}>26 items are already sold before you arrive.</Text>
+                <Text style={styles.insightBody}>{reservedItems} items are already reserved before service.</Text>
               </View>
             </View>
           </View>
@@ -176,6 +248,11 @@ const styles = StyleSheet.create({
   arrivedButtonDone: { backgroundColor: colors.greenSoft },
   arrivedText: { color: colors.ink, fontSize: type.label, fontWeight: '800' },
   arrivedTextDone: { color: colors.green },
+  modeBanner: { alignItems: 'center', backgroundColor: colors.greenSoft, borderRadius: radius.md, flexDirection: 'row', marginTop: spacing.lg, padding: spacing.md },
+  modeDot: { backgroundColor: colors.green, borderRadius: radius.pill, height: 12, width: 12 },
+  modeCopy: { flex: 1, marginLeft: spacing.md },
+  modeTitle: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
+  modeBody: { color: colors.muted, fontSize: type.tiny, lineHeight: 17, marginTop: spacing.xs },
   statsRow: { flexDirection: 'row', gap: spacing.sm, marginVertical: spacing.lg },
   statCard: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.md, flex: 1, padding: spacing.md },
   statValue: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
@@ -190,8 +267,10 @@ const styles = StyleSheet.create({
   listTitle: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
   listHint: { color: colors.muted, fontSize: type.tiny },
   orderList: { gap: spacing.sm },
-  orderCard: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.paper, borderRadius: radius.md, borderWidth: 2, flexDirection: 'row', minHeight: 82, padding: spacing.md },
+  orderCard: { backgroundColor: colors.paper, borderColor: colors.paper, borderRadius: radius.md, borderWidth: 2, padding: spacing.md },
   orderCardReady: { backgroundColor: colors.greenSoft, borderColor: colors.green },
+  orderCardCollected: { opacity: 0.56 },
+  orderMainRow: { alignItems: 'center', flexDirection: 'row' },
   initials: { alignItems: 'center', backgroundColor: colors.mist, borderRadius: radius.pill, height: 44, justifyContent: 'center', width: 44 },
   initialsReady: { backgroundColor: colors.green },
   initialsText: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
@@ -201,20 +280,37 @@ const styles = StyleSheet.create({
   orderName: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
   orderNumber: { color: colors.muted, fontSize: type.tiny, fontWeight: '700' },
   orderItems: { color: colors.muted, fontSize: type.tiny, lineHeight: 17, marginTop: spacing.xs },
-  check: { alignItems: 'center', borderColor: colors.line, borderRadius: radius.pill, borderWidth: 2, height: 28, justifyContent: 'center', width: 28 },
-  checkReady: { backgroundColor: colors.green, borderColor: colors.green },
-  checkText: { color: colors.muted, fontSize: type.label, fontWeight: '900' },
-  checkTextReady: { color: colors.paper },
-  stockHeader: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  stockHeaderText: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', width: 76 },
+  orderOptions: { color: colors.ink, fontSize: type.tiny, fontWeight: '700', marginTop: spacing.xs },
+  orderPrice: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
+  orderActionRow: { alignItems: 'center', flexDirection: 'row', marginTop: spacing.md },
+  statusPill: { borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  status_reserved: { backgroundColor: colors.cream },
+  status_preparing: { backgroundColor: colors.mustard },
+  status_ready: { backgroundColor: colors.green },
+  status_collected: { backgroundColor: colors.line },
+  statusText: { color: colors.ink, fontSize: type.tiny, fontWeight: '900' },
+  statusTextReady: { color: colors.paper },
+  orderActionButton: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.sm, flex: 1, justifyContent: 'center', marginLeft: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md },
+  orderActionButtonDisabled: { backgroundColor: colors.line },
+  orderActionText: { color: colors.paper, fontSize: type.label, fontWeight: '900' },
+  orderActionTextDisabled: { color: colors.muted },
+  stockList: { gap: spacing.md },
+  stockCard: { backgroundColor: colors.paper, borderRadius: radius.md, padding: spacing.lg },
+  stockTopRow: { alignItems: 'center', flexDirection: 'row' },
   stockName: { flex: 1 },
-  stockRow: { alignItems: 'center', backgroundColor: colors.paper, borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: 'row', minHeight: 74, paddingHorizontal: spacing.md },
-  stockItem: { color: colors.ink, fontSize: type.label, fontWeight: '800' },
+  stockItem: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
   stockTotal: { color: colors.muted, fontSize: type.tiny, marginTop: spacing.xs },
-  reservedCount: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.sm, justifyContent: 'center', minHeight: 36, width: 76 },
-  reservedCountText: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
-  walkInCount: { alignItems: 'center', justifyContent: 'center', width: 76 },
-  walkInCountText: { color: colors.ink, fontSize: type.body, fontWeight: '800' },
+  stockHealth: { backgroundColor: colors.greenSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  stockHealthLow: { backgroundColor: colors.cream },
+  stockHealthText: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  stockMetrics: { backgroundColor: colors.mist, borderRadius: radius.md, flexDirection: 'row', marginVertical: spacing.md, paddingVertical: spacing.md },
+  stockMetric: { alignItems: 'center', flex: 1 },
+  stockMetricValue: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
+  stockMetricLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
+  quickSaleButton: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.md, justifyContent: 'center', minHeight: 48 },
+  quickSaleButtonDisabled: { backgroundColor: colors.line },
+  quickSaleText: { color: colors.paper, fontSize: type.label, fontWeight: '900' },
+  quickSaleTextDisabled: { color: colors.muted },
   insightCard: { alignItems: 'center', backgroundColor: colors.greenSoft, borderRadius: radius.md, flexDirection: 'row', marginTop: spacing.lg, padding: spacing.lg },
   insightIcon: { color: colors.green, fontSize: type.hero, fontWeight: '900' },
   insightCopy: { flex: 1, marginLeft: spacing.md },

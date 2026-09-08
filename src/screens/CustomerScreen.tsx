@@ -3,27 +3,54 @@ import {
   ImageBackground,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BuildYourOwnModal } from '../components/BuildYourOwnModal';
 import { FoodImage } from '../components/FoodImage';
-import { products, type Product } from '../data';
+import { VanTrackingModal } from '../components/VanTrackingModal';
+import { products, reservableCount, type Inventory, type Order, type OrderStatus, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type CustomerScreenProps = {
+  favouriteIds: string[];
+  inventory: Inventory;
+  onReserve: (product: Product, quantity: number, options: string) => void;
   onRolePress: () => void;
+  onToggleFavourite: (productId: string) => void;
+  orders: Order[];
+  stopMode: boolean;
 };
 
-const sauces = ['Brown sauce', 'Red sauce', 'No sauce'];
+type CustomerTab = 'home' | 'favourites' | 'orders';
 
-export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
+const sauces = ['Brown sauce', 'Red sauce', 'No sauce'];
+const categories: Array<{ id: Product['category']; label: string }> = [
+  { id: 'cobs', label: 'Cobs & baguettes' },
+  { id: 'wraps', label: 'Wraps' },
+  { id: 'breakfast', label: 'Breakfast boxes' },
+];
+
+const statusLabels: Record<OrderStatus, string> = {
+  reserved: 'Reserved',
+  preparing: 'Preparing',
+  ready: 'Ready',
+  collected: 'Collected',
+};
+
+export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress, onToggleFavourite, orders, stopMode }: CustomerScreenProps) {
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Product | null>(null);
   const [sauce, setSauce] = useState(sauces[0]);
   const [quantity, setQuantity] = useState(1);
   const [reserved, setReserved] = useState(false);
+  const [category, setCategory] = useState<Product['category']>('cobs');
+  const [tracking, setTracking] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [tab, setTab] = useState<CustomerTab>('home');
 
   const openProduct = (product: Product) => {
     setSelected(product);
@@ -34,12 +61,78 @@ export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
   const closeProduct = () => setSelected(null);
 
   const reserve = () => {
+    if (!selected || reservableCount(inventory[selected.id]) < quantity) return;
+    onReserve(selected, quantity, sauce);
     setReserved(true);
     setSelected(null);
   };
 
+  const totalAvailable = products.reduce(
+    (sum, product) => sum + reservableCount(inventory[product.id]),
+    0,
+  );
+
+  const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
+  const visibleProducts = products.filter((product) => product.category === category);
+  const favouriteProducts = products.filter((product) => !product.custom && favouriteIds.includes(product.id));
+  const customerOrders = orders.filter((order) => order.customer === 'Jamie P.');
+
+  const renderProductCard = (product: Product) => {
+    const available = reservableCount(inventory[product.id]);
+    const stockLabel = available === 0
+      ? 'SOLD OUT ONLINE'
+      : available <= 3
+        ? `ONLY ${available} LEFT`
+        : product.badge;
+    const favourite = favouriteIds.includes(product.id);
+
+    return (
+      <Pressable
+        accessibilityLabel={`Choose ${product.name}, £${product.price.toFixed(2)}`}
+        accessibilityState={{ disabled: available === 0 }}
+        key={product.id}
+        onPress={() => {
+          if (available === 0) return;
+          if (product.custom) setBuilding(true);
+          else openProduct(product);
+        }}
+        style={({ pressed }) => [styles.productCard, available === 0 && styles.cardDisabled, pressed && styles.cardPressed]}
+      >
+        <View style={styles.productImageWrap}>
+          <FoodImage image={product.image} />
+          {stockLabel ? (
+            <View style={[styles.badge, available <= 3 && styles.badgeUrgent]}>
+              <Text style={styles.badgeText}>{stockLabel}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.productCopy}>
+          <View style={styles.productNameRow}>
+            <Text style={styles.productName}>{product.name}</Text>
+            {!product.custom ? (
+              <Pressable
+                accessibilityLabel={`${favourite ? 'Remove' : 'Add'} ${product.name} ${favourite ? 'from' : 'to'} favourites`}
+                onPress={() => onToggleFavourite(product.id)}
+                style={styles.favouriteButton}
+              >
+                <Text style={[styles.favouriteIcon, favourite && styles.favouriteIconActive]}>{favourite ? '♥' : '♡'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Text numberOfLines={2} style={styles.productDescription}>{product.description}</Text>
+          <View style={styles.productBottom}>
+            <Text style={styles.price}>{product.custom ? 'FROM ' : ''}£{product.price.toFixed(2)}</Text>
+            <View style={[styles.addButton, available === 0 && styles.addButtonDisabled]}>
+              <Text style={styles.addButtonText}>{available === 0 ? '×' : '+'}</Text>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <View>
@@ -51,11 +144,13 @@ export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
           </Pressable>
         </View>
 
+        {tab === 'home' ? (
+          <>
         {reserved ? (
           <View style={styles.successCard}>
             <View style={styles.successIcon}><Text style={styles.successIconText}>✓</Text></View>
             <View style={styles.successCopy}>
-              <Text style={styles.successTitle}>Your cob is reserved</Text>
+              <Text style={styles.successTitle}>Your food is reserved</Text>
               <Text style={styles.successBody}>Collect at Acero · 10:15–10:25</Text>
             </View>
             <Pressable accessibilityLabel="Dismiss reservation message" onPress={() => setReserved(false)}>
@@ -72,85 +167,152 @@ export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
           <View style={styles.heroShade} />
           <View style={styles.livePill}>
             <View style={styles.liveDot} />
-            <Text style={styles.liveText}>ON THE WAY</Text>
+            <Text style={styles.liveText}>{stopMode ? 'AT ACERO NOW' : 'ON THE WAY'}</Text>
           </View>
           <View style={styles.heroCopy}>
             <Text style={styles.heroTitle}>The Cob Van</Text>
             <View style={styles.etaRow}>
-              <Text style={styles.etaTime}>10:15</Text>
+              <Text style={styles.etaTime}>{stopMode ? 'NOW' : '10:15'}</Text>
               <View style={styles.etaDivider} />
               <View>
-                <Text style={styles.etaLabel}>ARRIVING IN</Text>
-                <Text style={styles.etaMinutes}>12 minutes</Text>
+                <Text style={styles.etaLabel}>{stopMode ? 'STOP MODE' : 'ARRIVING IN'}</Text>
+                <Text style={styles.etaMinutes}>{stopMode ? 'Order before it goes' : '12 minutes'}</Text>
               </View>
             </View>
           </View>
         </ImageBackground>
 
+        <View style={styles.cutoffCard}>
+          <View style={styles.cutoffClock}><Text style={styles.cutoffClockText}>◷</Text></View>
+          <View style={styles.cutoffCopy}>
+            <Text style={styles.cutoffTitle}>Breakfast orders close at 9:45</Text>
+            <Text style={styles.cutoffBody}>18 minutes left to reserve for Acero</Text>
+          </View>
+        </View>
+
         <View style={styles.sectionHeading}>
           <View>
             <Text style={styles.sectionTitle}>Today’s menu</Text>
-            <Text style={styles.sectionHint}>Reserve now. Pay at the van.</Text>
+            <Text style={styles.sectionHint}>{stopMode ? 'Limited availability during the stop.' : 'Reserve now. Pay at the van.'}</Text>
           </View>
-          <Text style={styles.available}>{products.reduce((sum, item) => sum + item.stock, 0)} left</Text>
+          <Text style={styles.available}>{totalAvailable} to reserve</Text>
         </View>
 
-        <View style={styles.productList}>
-          {products.map((product) => (
+        <ScrollView
+          contentContainerStyle={styles.categoryRow}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {categories.map((item) => (
             <Pressable
-              accessibilityLabel={`Choose ${product.name}, £${product.price.toFixed(2)}`}
-              key={product.id}
-              onPress={() => openProduct(product)}
-              style={({ pressed }) => [styles.productCard, pressed && styles.cardPressed]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: category === item.id }}
+              key={item.id}
+              onPress={() => setCategory(item.id)}
+              style={[styles.categoryChip, category === item.id && styles.categoryChipActive]}
             >
-              <View style={styles.productImageWrap}>
-                <FoodImage crop={product.crop} />
-                {product.badge ? (
-                  <View style={[styles.badge, product.stock <= 3 && styles.badgeUrgent]}>
-                    <Text style={styles.badgeText}>{product.badge}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.productCopy}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text numberOfLines={2} style={styles.productDescription}>{product.description}</Text>
-                <View style={styles.productBottom}>
-                  <Text style={styles.price}>£{product.price.toFixed(2)}</Text>
-                  <View style={styles.addButton}><Text style={styles.addButtonText}>+</Text></View>
-                </View>
-              </View>
+              <Text style={[styles.categoryText, category === item.id && styles.categoryTextActive]}>{item.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
 
-        <View style={styles.routeCard}>
+        <View style={styles.productList}>{visibleProducts.map(renderProductCard)}</View>
+
+        <Pressable accessibilityLabel="Track the van on a live map" onPress={() => setTracking(true)} style={styles.routeCard}>
           <View style={styles.routeIcon}><Text style={styles.routeIconText}>↗</Text></View>
           <View style={styles.routeCopy}>
             <Text style={styles.routeTitle}>Track the van</Text>
             <Text style={styles.routeBody}>2 stops away · Birchwood Road</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
-        </View>
+        </Pressable>
+          </>
+        ) : tab === 'favourites' ? (
+          <View style={styles.tabScreen}>
+            <Text style={styles.tabEyebrow}>QUICK PICKS</Text>
+            <Text style={styles.tabTitle}>Favourites</Text>
+            <Text style={styles.tabSubtitle}>Tap a meal to reserve it as usual.</Text>
+            {favouriteProducts.length > 0 ? (
+              <View style={styles.productList}>{favouriteProducts.map(renderProductCard)}</View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>♡</Text>
+                <Text style={styles.emptyTitle}>No favourites yet</Text>
+                <Text style={styles.emptyBody}>Tap the heart on a menu item to keep it here.</Text>
+                <Pressable onPress={() => setTab('home')} style={styles.emptyButton}>
+                  <Text style={styles.emptyButtonText}>Browse menu</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.tabScreen}>
+            <Text style={styles.tabEyebrow}>ACERO · TODAY</Text>
+            <Text style={styles.tabTitle}>Your orders</Text>
+            <Text style={styles.tabSubtitle}>Current and recent reservations.</Text>
+            {customerOrders.length > 0 ? (
+              <View style={styles.customerOrderList}>
+                {customerOrders.map((order) => (
+                  <View key={order.id} style={styles.customerOrderCard}>
+                    <View style={styles.customerOrderTop}>
+                      <View style={styles.customerOrderCopy}>
+                        <Text style={styles.customerOrderName}>{order.quantity}× {order.itemName}</Text>
+                        <Text style={styles.customerOrderNumber}>ORDER #{order.orderNumber}</Text>
+                      </View>
+                      <Text style={styles.customerOrderPrice}>£{order.total.toFixed(2)}</Text>
+                    </View>
+                    <Text style={styles.customerOrderOptions}>{order.options}</Text>
+                    <View style={styles.customerOrderBottom}>
+                      <View style={[styles.customerStatus, styles[`customerStatus_${order.status}`]]}>
+                        <Text style={[styles.customerStatusText, order.status === 'ready' && styles.customerStatusTextReady]}>{statusLabels[order.status]}</Text>
+                      </View>
+                      <View style={styles.collectionCopy}>
+                        <Text style={styles.collectionLocation}>Acero</Text>
+                        <Text style={styles.collectionTime}>10:15–10:25</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>◷</Text>
+                <Text style={styles.emptyTitle}>No orders yet</Text>
+                <Text style={styles.emptyBody}>Your reservations will appear here.</Text>
+                <Pressable onPress={() => setTab('home')} style={styles.emptyButton}>
+                  <Text style={styles.emptyButtonText}>Order breakfast</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
-      <View style={styles.tabBar}>
-        <View style={styles.tabActive}><Text style={styles.tabIcon}>⌂</Text><Text style={styles.tabActiveText}>Home</Text></View>
-        <View style={styles.tab}><Text style={styles.tabIconMuted}>♡</Text><Text style={styles.tabText}>Favourites</Text></View>
-        <View style={styles.tab}><Text style={styles.tabIconMuted}>◷</Text><Text style={styles.tabText}>Orders</Text></View>
+      <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'home' }} onPress={() => setTab('home')} style={tab === 'home' ? styles.tabActive : styles.tab}>
+          <Text style={tab === 'home' ? styles.tabIcon : styles.tabIconMuted}>⌂</Text><Text style={tab === 'home' ? styles.tabActiveText : styles.tabText}>Home</Text>
+        </Pressable>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'favourites' }} onPress={() => setTab('favourites')} style={tab === 'favourites' ? styles.tabActive : styles.tab}>
+          <Text style={tab === 'favourites' ? styles.tabIcon : styles.tabIconMuted}>♡</Text><Text style={tab === 'favourites' ? styles.tabActiveText : styles.tabText}>Favourites</Text>
+        </Pressable>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'orders' }} onPress={() => setTab('orders')} style={tab === 'orders' ? styles.tabActive : styles.tab}>
+          <Text style={tab === 'orders' ? styles.tabIcon : styles.tabIconMuted}>◷</Text><Text style={tab === 'orders' ? styles.tabActiveText : styles.tabText}>Orders</Text>
+        </Pressable>
       </View>
 
       <Modal animationType="slide" onRequestClose={closeProduct} transparent visible={selected !== null}>
         <View style={styles.modalBackdrop}>
           <Pressable accessibilityLabel="Close product" onPress={closeProduct} style={styles.modalDismissArea} />
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.xxl) }]}>
             <View style={styles.sheetHandle} />
             {selected ? (
               <>
                 <View style={styles.sheetHeader}>
-                  <View style={styles.sheetImage}><FoodImage crop={selected.crop} /></View>
+                  <View style={styles.sheetImage}><FoodImage image={selected.image} /></View>
                   <View style={styles.sheetTitleWrap}>
                     <Text style={styles.sheetTitle}>{selected.name}</Text>
                     <Text style={styles.sheetPrice}>£{selected.price.toFixed(2)}</Text>
+                    <Text style={styles.sheetStock}>{selectedAvailable} available to reserve</Text>
                   </View>
                 </View>
                 <Text style={styles.choiceLabel}>SAUCE</Text>
@@ -165,10 +327,23 @@ export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
                   <View style={styles.stepper}>
                     <Pressable accessibilityLabel="Decrease quantity" onPress={() => setQuantity(Math.max(1, quantity - 1))} style={styles.stepButton}><Text style={styles.stepText}>−</Text></Pressable>
                     <Text style={styles.quantity}>{quantity}</Text>
-                    <Pressable accessibilityLabel="Increase quantity" onPress={() => setQuantity(quantity + 1)} style={styles.stepButton}><Text style={styles.stepText}>+</Text></Pressable>
+                    <Pressable
+                      accessibilityLabel="Increase quantity"
+                      accessibilityState={{ disabled: quantity >= selectedAvailable }}
+                      disabled={quantity >= selectedAvailable}
+                      onPress={() => setQuantity(Math.min(selectedAvailable, quantity + 1))}
+                      style={[styles.stepButton, quantity >= selectedAvailable && styles.stepButtonDisabled]}
+                    >
+                      <Text style={styles.stepText}>+</Text>
+                    </Pressable>
                   </View>
-                  <Pressable onPress={reserve} style={styles.reserveButton}>
-                    <Text style={styles.reserveText}>Reserve mine</Text>
+                  <Pressable
+                    accessibilityState={{ disabled: selectedAvailable === 0 }}
+                    disabled={selectedAvailable === 0}
+                    onPress={reserve}
+                    style={[styles.reserveButton, selectedAvailable === 0 && styles.reserveButtonDisabled]}
+                  >
+                    <Text style={styles.reserveText}>{selectedAvailable === 0 ? 'Buy at the van' : 'Reserve mine'}</Text>
                     <Text style={styles.reservePrice}>£{(selected.price * quantity).toFixed(2)}</Text>
                   </Pressable>
                 </View>
@@ -178,6 +353,16 @@ export function CustomerScreen({ onRolePress }: CustomerScreenProps) {
           </View>
         </View>
       </Modal>
+      <BuildYourOwnModal
+        available={reservableCount(inventory['build-your-own'])}
+        onClose={() => setBuilding(false)}
+        onReserve={(product, customQuantity, options) => {
+          onReserve(product, customQuantity, options);
+          setReserved(true);
+        }}
+        visible={building}
+      />
+      <VanTrackingModal onClose={() => setTracking(false)} visible={tracking} />
     </SafeAreaView>
   );
 }
@@ -210,23 +395,40 @@ const styles = StyleSheet.create({
   etaDivider: { backgroundColor: colors.paper, height: 34, marginHorizontal: spacing.md, opacity: 0.45, width: 1 },
   etaLabel: { color: colors.paper, fontSize: type.tiny, fontWeight: '700', letterSpacing: 0.8, opacity: 0.8 },
   etaMinutes: { color: colors.paper, fontSize: type.body, fontWeight: '800', marginTop: 2 },
+  cutoffCard: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, flexDirection: 'row', marginBottom: spacing.xxl, padding: spacing.md },
+  cutoffClock: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.pill, height: 40, justifyContent: 'center', width: 40 },
+  cutoffClockText: { color: colors.mustard, fontSize: type.title, fontWeight: '900' },
+  cutoffCopy: { flex: 1, marginLeft: spacing.md },
+  cutoffTitle: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
+  cutoffBody: { color: colors.inkSoft, fontSize: type.tiny, marginTop: spacing.xs },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg },
   sectionTitle: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
   sectionHint: { color: colors.muted, fontSize: type.label, marginTop: spacing.xs },
   available: { color: colors.green, fontSize: type.label, fontWeight: '800' },
+  categoryRow: { gap: spacing.sm, paddingBottom: spacing.lg },
+  categoryChip: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.lg },
+  categoryChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  categoryText: { color: colors.ink, fontSize: type.label, fontWeight: '800' },
+  categoryTextActive: { color: colors.paper },
   productList: { gap: spacing.md },
   productCard: { backgroundColor: colors.paper, borderRadius: radius.md, flexDirection: 'row', minHeight: 142, padding: spacing.sm, ...shadow },
+  cardDisabled: { opacity: 0.58 },
   cardPressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
   productImageWrap: { height: 126, position: 'relative', width: 126 },
   badge: { backgroundColor: colors.mustard, borderRadius: radius.pill, left: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, position: 'absolute', top: spacing.sm },
   badgeUrgent: { backgroundColor: colors.red },
   badgeText: { color: colors.paper, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   productCopy: { flex: 1, justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  productName: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
+  productNameRow: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
+  productName: { color: colors.ink, flex: 1, fontSize: type.body, fontWeight: '900', paddingRight: spacing.xs },
+  favouriteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 36, minWidth: 36, marginRight: -spacing.sm, marginTop: -spacing.sm },
+  favouriteIcon: { color: colors.muted, fontSize: type.title },
+  favouriteIconActive: { color: colors.orange },
   productDescription: { color: colors.muted, fontSize: type.tiny, lineHeight: 18 },
   productBottom: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   price: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
   addButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, height: 36, justifyContent: 'center', width: 36 },
+  addButtonDisabled: { backgroundColor: colors.line },
   addButtonText: { color: colors.ink, fontSize: type.title, fontWeight: '700', lineHeight: 25 },
   routeCard: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.md, flexDirection: 'row', marginTop: spacing.xl, padding: spacing.lg },
   routeIcon: { alignItems: 'center', backgroundColor: colors.inkSoft, borderRadius: radius.sm, height: 44, justifyContent: 'center', width: 44 },
@@ -235,6 +437,35 @@ const styles = StyleSheet.create({
   routeTitle: { color: colors.paper, fontSize: type.body, fontWeight: '800' },
   routeBody: { color: colors.paper, fontSize: type.tiny, marginTop: spacing.xs, opacity: 0.66 },
   chevron: { color: colors.paper, fontSize: type.hero, opacity: 0.7 },
+  tabScreen: { paddingBottom: spacing.xxl },
+  tabEyebrow: { color: colors.orange, fontSize: type.tiny, fontWeight: '900', letterSpacing: 1, marginTop: spacing.sm },
+  tabTitle: { color: colors.ink, fontSize: type.hero, fontWeight: '900', marginTop: spacing.xs },
+  tabSubtitle: { color: colors.muted, fontSize: type.label, marginBottom: spacing.xl, marginTop: spacing.xs },
+  emptyCard: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.lg, padding: spacing.xxl, ...shadow },
+  emptyIcon: { color: colors.orange, fontSize: type.hero },
+  emptyTitle: { color: colors.ink, fontSize: type.body, fontWeight: '900', marginTop: spacing.md },
+  emptyBody: { color: colors.muted, fontSize: type.label, lineHeight: 20, marginTop: spacing.xs, textAlign: 'center' },
+  emptyButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, justifyContent: 'center', marginTop: spacing.lg, minHeight: 48, paddingHorizontal: spacing.xl },
+  emptyButtonText: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
+  customerOrderList: { gap: spacing.md },
+  customerOrderCard: { backgroundColor: colors.paper, borderRadius: radius.md, padding: spacing.lg, ...shadow },
+  customerOrderTop: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
+  customerOrderCopy: { flex: 1, paddingRight: spacing.md },
+  customerOrderName: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
+  customerOrderNumber: { color: colors.orange, fontSize: type.tiny, fontWeight: '900', letterSpacing: 0.6, marginTop: spacing.xs },
+  customerOrderPrice: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
+  customerOrderOptions: { color: colors.muted, fontSize: type.label, lineHeight: 20, marginTop: spacing.md },
+  customerOrderBottom: { alignItems: 'center', borderTopColor: colors.line, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingTop: spacing.md },
+  customerStatus: { borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  customerStatus_reserved: { backgroundColor: colors.cream },
+  customerStatus_preparing: { backgroundColor: colors.mustard },
+  customerStatus_ready: { backgroundColor: colors.green },
+  customerStatus_collected: { backgroundColor: colors.line },
+  customerStatusText: { color: colors.ink, fontSize: type.tiny, fontWeight: '900' },
+  customerStatusTextReady: { color: colors.paper },
+  collectionCopy: { alignItems: 'flex-end' },
+  collectionLocation: { color: colors.ink, fontSize: type.tiny, fontWeight: '900' },
+  collectionTime: { color: colors.muted, fontSize: type.tiny, marginTop: spacing.xs },
   tabBar: { backgroundColor: colors.paper, borderTopColor: colors.line, borderTopWidth: 1, bottom: 0, flexDirection: 'row', left: 0, paddingBottom: spacing.lg, paddingTop: spacing.md, position: 'absolute', right: 0 },
   tab: { alignItems: 'center', flex: 1, gap: spacing.xs },
   tabActive: { alignItems: 'center', flex: 1, gap: spacing.xs },
@@ -251,6 +482,7 @@ const styles = StyleSheet.create({
   sheetTitleWrap: { flex: 1, marginLeft: spacing.lg },
   sheetTitle: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
   sheetPrice: { color: colors.orange, fontSize: type.body, fontWeight: '900', marginTop: spacing.xs },
+  sheetStock: { color: colors.green, fontSize: type.tiny, fontWeight: '800', marginTop: spacing.xs },
   choiceLabel: { color: colors.muted, fontSize: type.tiny, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.md },
   sauceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
   sauceChip: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
@@ -260,9 +492,11 @@ const styles = StyleSheet.create({
   checkoutRow: { flexDirection: 'row', gap: spacing.md },
   stepper: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.md, flexDirection: 'row' },
   stepButton: { alignItems: 'center', height: 56, justifyContent: 'center', width: 44 },
+  stepButtonDisabled: { opacity: 0.3 },
   stepText: { color: colors.ink, fontSize: type.title, fontWeight: '800' },
   quantity: { color: colors.ink, fontSize: type.body, fontWeight: '900', minWidth: 24, textAlign: 'center' },
   reserveButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, flex: 1, flexDirection: 'row', height: 56, justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  reserveButtonDisabled: { backgroundColor: colors.line },
   reserveText: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
   reservePrice: { color: colors.ink, fontSize: type.body, fontWeight: '800' },
   payNote: { color: colors.muted, fontSize: type.tiny, marginTop: spacing.md, textAlign: 'center' },
