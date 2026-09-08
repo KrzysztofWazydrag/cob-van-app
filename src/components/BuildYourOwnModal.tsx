@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, type ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
@@ -10,7 +10,8 @@ type BaseOption = {
 };
 
 type FillingOption = {
-  name: 'Bacon' | 'Sausage' | 'Fried egg' | 'Hash brown' | 'Cheese' | 'Mushrooms';
+  image: ImageSourcePropType;
+  name: 'Bacon' | 'Sausage' | 'Fried egg' | 'Hash brown' | 'Cheese' | 'Mushrooms' | 'Tomato' | 'Sweetcorn' | 'Cucumber' | 'Egg mayo';
   price: number;
 };
 
@@ -28,15 +29,19 @@ const bases: BaseOption[] = [
 ];
 
 const fillings: FillingOption[] = [
-  { name: 'Bacon', price: 1.25 },
-  { name: 'Sausage', price: 1.25 },
-  { name: 'Fried egg', price: 0.95 },
-  { name: 'Hash brown', price: 0.75 },
-  { name: 'Cheese', price: 0.8 },
-  { name: 'Mushrooms', price: 0.65 },
+  { image: require('../../assets/ingredients/bacon.png'), name: 'Bacon', price: 1.25 },
+  { image: require('../../assets/ingredients/sausage.png'), name: 'Sausage', price: 1.25 },
+  { image: require('../../assets/ingredients/fried-egg.png'), name: 'Fried egg', price: 0.95 },
+  { image: require('../../assets/ingredients/hash-brown.png'), name: 'Hash brown', price: 0.75 },
+  { image: require('../../assets/ingredients/cheese.png'), name: 'Cheese', price: 0.8 },
+  { image: require('../../assets/ingredients/mushrooms.png'), name: 'Mushrooms', price: 0.65 },
+  { image: require('../../assets/ingredients/tomato.png'), name: 'Tomato', price: 0.5 },
+  { image: require('../../assets/ingredients/sweetcorn.png'), name: 'Sweetcorn', price: 0.5 },
+  { image: require('../../assets/ingredients/cucumber.png'), name: 'Cucumber', price: 0.5 },
+  { image: require('../../assets/ingredients/egg-mayo.png'), name: 'Egg mayo', price: 0.75 },
 ];
 
-const sauces = ['Brown sauce', 'Red sauce', 'No sauce'] as const;
+const sauces = ['No sauce', 'Brown sauce', 'Red sauce'] as const;
 
 export function BuildYourOwnModal({ available, onClose, onReserve, visible }: BuildYourOwnModalProps) {
   const [base, setBase] = useState<BaseOption>(bases[0]);
@@ -123,8 +128,11 @@ export function BuildYourOwnModal({ available, onClose, onReserve, visible }: Bu
                   onPress={() => toggleFilling(item)}
                   style={[styles.fillingChip, active && styles.optionActive]}
                 >
-                  <Text style={[styles.optionName, active && styles.optionTextActive]}>{active ? '✓  ' : ''}{item.name}</Text>
-                  <Text style={[styles.optionPrice, active && styles.optionTextActive]}>+£{item.price.toFixed(2)}</Text>
+                  <View style={styles.fillingCopy}>
+                    <Text numberOfLines={1} style={[styles.optionName, active && styles.optionTextActive]}>{active ? '✓  ' : ''}{item.name}</Text>
+                    <Text style={[styles.optionPrice, active && styles.optionTextActive]}>+£{item.price.toFixed(2)}</Text>
+                  </View>
+                  <Image accessibilityIgnoresInvertColors source={item.image} style={styles.fillingImage} />
                 </Pressable>
               );
             })}
@@ -208,7 +216,9 @@ const styles = StyleSheet.create({
   optionPrice: { color: colors.muted, fontSize: type.tiny, fontWeight: '700', marginTop: spacing.xs },
   optionTextActive: { color: colors.paper },
   fillingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
-  fillingChip: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, justifyContent: 'center', minHeight: 62, paddingHorizontal: spacing.md, width: '48.5%' },
+  fillingChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', minHeight: 72, paddingHorizontal: spacing.sm, width: '48.5%' },
+  fillingImage: { height: 40, marginLeft: spacing.sm, resizeMode: 'contain', width: 40 },
+  fillingCopy: { flex: 1 },
   sauceChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.pill, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.sm },
   sauceText: { color: colors.ink, fontSize: type.tiny, fontWeight: '800', textAlign: 'center' },
   summaryCard: { backgroundColor: colors.paper, borderRadius: radius.md, marginTop: spacing.sm, padding: spacing.lg, ...shadow },

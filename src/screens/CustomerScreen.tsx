@@ -28,7 +28,7 @@ type CustomerScreenProps = {
 
 type CustomerTab = 'home' | 'favourites' | 'orders';
 
-const sauces = ['Brown sauce', 'Red sauce', 'No sauce'];
+const sauces = ['No sauce', 'Brown sauce', 'Red sauce'];
 const categories: Array<{ id: Product['category']; label: string }> = [
   { id: 'cobs', label: 'Cobs & baguettes' },
   { id: 'wraps', label: 'Wraps' },
@@ -64,7 +64,7 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
 
   const reserve = () => {
     if (!selected || reservableCount(inventory[selected.id]) < quantity) return;
-    onReserve(selected, quantity, sauce);
+    onReserve(selected, quantity, selected.id === 'tuna-mayo' ? 'No sauce' : sauce);
     setReserved(true);
     setSelected(null);
   };
@@ -81,9 +81,10 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
 
   const renderProductCard = (product: Product) => {
     const available = reservableCount(inventory[product.id]);
+    const showLowStock = product.category === 'cobs' && available <= 3;
     const stockLabel = available === 0
       ? 'SOLD OUT ONLINE'
-      : available <= 3
+      : showLowStock
         ? `ONLY ${available} LEFT`
         : product.badge;
     const favourite = favouriteIds.includes(product.id);
@@ -103,7 +104,7 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
         <View style={styles.productImageWrap}>
           <FoodImage image={product.image} />
           {stockLabel ? (
-            <View style={[styles.badge, available <= 3 && styles.badgeUrgent]}>
+            <View style={[styles.badge, (available === 0 || showLowStock) && styles.badgeUrgent]}>
               <Text style={styles.badgeText}>{stockLabel}</Text>
             </View>
           ) : null}
@@ -211,8 +212,8 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
 
         <View style={styles.sectionHeading}>
           <View>
-            <Text style={styles.sectionTitle}>Today’s menu</Text>
-            <Text style={styles.sectionHint}>{stopMode ? 'Limited availability during the stop.' : 'Reserve now. Pay at the van.'}</Text>
+            <Text style={styles.sectionTitle}>Order ahead</Text>
+            <Text style={styles.sectionHint}>Choose from today’s menu before the van arrives.</Text>
           </View>
           <Text style={styles.available}>{totalAvailable} to reserve</Text>
         </View>
@@ -326,14 +327,18 @@ export function CustomerScreen({ favouriteIds, inventory, onReserve, onRolePress
                     <Text style={styles.sheetStock}>{selectedAvailable} available to reserve</Text>
                   </View>
                 </View>
-                <Text style={styles.choiceLabel}>SAUCE</Text>
-                <View style={styles.sauceRow}>
-                  {sauces.map((item) => (
-                    <Pressable key={item} onPress={() => setSauce(item)} style={[styles.sauceChip, sauce === item && styles.sauceChipActive]}>
-                      <Text style={[styles.sauceText, sauce === item && styles.sauceTextActive]}>{item}</Text>
-                    </Pressable>
-                  ))}
-                </View>
+                {selected.id !== 'tuna-mayo' ? (
+                  <>
+                    <Text style={styles.choiceLabel}>SAUCE</Text>
+                    <View style={styles.sauceRow}>
+                      {sauces.map((item) => (
+                        <Pressable key={item} onPress={() => setSauce(item)} style={[styles.sauceChip, sauce === item && styles.sauceChipActive]}>
+                          <Text style={[styles.sauceText, sauce === item && styles.sauceTextActive]}>{item}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
                 <View style={styles.checkoutRow}>
                   <View style={styles.stepper}>
                     <Pressable accessibilityLabel="Decrease quantity" onPress={() => setQuantity(Math.max(1, quantity - 1))} style={styles.stepButton}><Text style={styles.stepText}>−</Text></Pressable>
