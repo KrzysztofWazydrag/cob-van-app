@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     signInWithPassword: vi.fn(), signUp: vi.fn(), startAutoRefresh: vi.fn(), stopAutoRefresh: vi.fn(),
   },
   unsubscribe: vi.fn(), remove: vi.fn(),
+  openURL: vi.fn(),
 }));
 vi.mock('../src/lib/supabase', () => ({ supabase: { auth: mocks.auth } }));
 vi.mock('react-native', () => ({
@@ -17,6 +18,7 @@ vi.mock('react-native', () => ({
   KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', TextInput: 'TextInput',
   StyleSheet: { create: (styles: unknown) => styles }, Platform: { OS: 'ios' },
   AppState: { currentState: 'active', addEventListener: (_event: string, fn: typeof mocks.appStateListener) => { mocks.appStateListener = fn; return { remove: mocks.remove }; } },
+  Linking: { openURL: mocks.openURL },
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
@@ -55,6 +57,7 @@ beforeEach(() => {
     mocks.listener = listener;
     return { data: { subscription: { unsubscribe: mocks.unsubscribe } } };
   });
+  mocks.openURL.mockResolvedValue(undefined);
 });
 afterEach(async () => { if (tree) await act(async () => tree.unmount()); });
 
@@ -124,6 +127,10 @@ test('sign up supplies display name and handles email confirmation without a ses
   mocks.auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
   await act(async () => { tree = create(<AuthScreen client={{ auth: mocks.auth } as any} />); });
   await press('New to Cob Van');
+  expect(text()).toContain('Are you a van owner?');
+  await press('Are you a van owner?');
+  expect(text()).toContain('Owner accounts are set up manually');
+  expect(mocks.openURL).toHaveBeenCalledWith('mailto:sitecrew.cc@gmail.com?subject=Cob%20Van%20owner%20onboarding');
   await fill('Display name', ' Jamie ');
   await fill('Email', 'jamie@example.com');
   await fill('Password', 'password123');

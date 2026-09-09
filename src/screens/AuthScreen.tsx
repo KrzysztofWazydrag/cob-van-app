@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ImageBackground,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +30,7 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [ownerContactVisible, setOwnerContactVisible] = useState(false);
 
   async function submit() {
     if (busy) return;
@@ -67,8 +69,18 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
     setSignUp((current) => !current);
     setPassword('');
     setShowPassword(false);
+    setOwnerContactVisible(false);
     setError(null);
     setMessage(null);
+  }
+
+  async function contactOwner() {
+    setOwnerContactVisible(true);
+    try {
+      await Linking.openURL('mailto:sitecrew.cc@gmail.com?subject=Cob%20Van%20owner%20onboarding');
+    } catch {
+      // The visible email address remains available if no mail app is configured.
+    }
   }
 
   return (
@@ -189,6 +201,17 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
                 <Text style={styles.switchAction}>{signUp ? 'Sign in' : 'Sign up'}</Text>
               </Text>
             </Pressable>
+
+            {signUp ? (
+              <View style={styles.ownerContact}>
+                <Pressable accessibilityRole="link" onPress={contactOwner}>
+                  <Text style={styles.ownerContactText}>Are you a van owner? <Text style={styles.ownerContactLink}>Contact us</Text></Text>
+                </Pressable>
+                {ownerContactVisible ? (
+                  <Text accessibilityLiveRegion="polite" style={styles.ownerContactNote}>Owner accounts are set up manually. Email sitecrew.cc@gmail.com.</Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -225,4 +248,8 @@ const styles = StyleSheet.create({
   secondary: { alignItems: 'center', justifyContent: 'center', minHeight: spacing.xxxl + spacing.xl, paddingHorizontal: spacing.sm, paddingTop: spacing.md },
   switchText: { color: colors.ink, fontSize: type.body, fontWeight: '800', textAlign: 'center' },
   switchAction: { color: colors.orange, fontWeight: '900' },
+  ownerContact: { alignItems: 'center', paddingBottom: spacing.sm, paddingHorizontal: spacing.lg },
+  ownerContactText: { color: colors.muted, fontSize: type.label, textAlign: 'center' },
+  ownerContactLink: { color: colors.orange, fontWeight: '900' },
+  ownerContactNote: { color: colors.muted, fontSize: type.tiny, lineHeight: 18, marginTop: spacing.sm, textAlign: 'center' },
 });

@@ -74,7 +74,7 @@ The accessible **Log out** button calls `supabase.auth.signOut({ scope: 'local' 
 - `workplaces`: UUID primary key, required van, name, unique invite code, active flag, creation timestamp.
 - An auth-user insert trigger creates the profile atomically, even when signup requires confirmation. Existing auth users are backfilled. Role is always `customer` regardless of signup metadata. This follows Supabase's [profile trigger guidance](https://supabase.com/docs/guides/auth/managing-user-data).
 - All three tables have RLS. Authenticated users can select their own profile and update only `display_name`. Column grants prevent changing roles/membership/IDs/timestamps. Anonymous users have no access. Vans/workplaces have no client grants or policies yet.
-- Owner/driver assignment, vans and workplaces are managed manually in the development dashboard/SQL Editor. Invite-code creation and membership are intentionally not implemented. Owner references prevent deleting a profile that still owns a van; reassign the van before deleting its owner.
+- Owner assignment, vans and workplaces are managed manually in the development dashboard/SQL Editor. Public signup always creates a customer and cannot set privileged profile fields. Driver onboarding will require a separate one-time staff invite validated by trusted backend code; it is intentionally not implemented yet. Workplace codes remain separate customer membership codes and must never grant staff roles. Owner references prevent deleting a profile that still owns a van; reassign the van before deleting its owner.
 
 ## Validation
 
