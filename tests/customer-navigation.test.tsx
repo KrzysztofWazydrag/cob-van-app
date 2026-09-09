@@ -68,6 +68,9 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
 
   await pressText('In the van');
   expect(renderedText()).toContain('READY RIGHT NOW');
+  expect(renderedText()).toContain('available');
+  expect(renderedText()).not.toContain('available to reserve');
+  expect(renderedText()).not.toContain(' in van · ');
   await pressText('Orders');
   expect(renderedText()).toContain('Your orders');
   await pressText('Profile');

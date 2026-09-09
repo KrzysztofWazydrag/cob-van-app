@@ -24,7 +24,6 @@ export function InVanStockView({ inventory, onChoose, products }: InVanStockView
           {readyStock.map((product) => {
             const stock = inventory[product.id];
             const available = reservableCount(stock);
-            const inVanAvailable = Math.max(stock.physical - stock.reserved, 0);
 
             return (
               <View key={product.id} style={styles.card}>
@@ -32,7 +31,7 @@ export function InVanStockView({ inventory, onChoose, products }: InVanStockView
                 <View style={styles.itemCopy}>
                   <Text style={styles.itemName}>{product.name}</Text>
                   <Text style={styles.price}>£{product.price.toFixed(2)}</Text>
-                  <Text style={styles.available}>{inVanAvailable} in van · {available} to reserve</Text>
+                  <Text style={styles.available}>{available} available</Text>
                 </View>
                 <Pressable
                   accessibilityLabel={`Reserve ${product.name}, ${available} available`}
