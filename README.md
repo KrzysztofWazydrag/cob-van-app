@@ -7,7 +7,7 @@ Expo app for iOS, Android, and web with Supabase email/password authentication a
 - Customer home with tappable live ETA tracking, ready van stock, menu categories, and low-stock prompts
 - Product customisation with sauce, quantity, and `Reserve mine`
 - Build-your-own cob, baguette, or wrap with live filling prices and a clear order summary
-- Working Home, Favourites, and Orders customer tabs
+- Working Home, In the Van, Orders, and Profile customer tabs
 - One distinct local food photo for every menu item
 - New reservations appear immediately in the current-stop driver order list
 - Van crew order flow: ready van stock goes straight to `Ready → Collected`; made-to-order food uses `Reserved → Preparing → Ready → Collected`
@@ -41,7 +41,7 @@ npm run web
 
 ## Current scope
 
-Authentication uses Supabase; product data remains realistic local mock data. Menu, orders, stock, favourites, workplace selection, map movement and service time remain local/simulated. Map tiles require an internet connection. Real GPS, remote push delivery and app-data persistence are deferred. The JP/CV switch is a prototype preview control, not backend authorization; it remains available to every authenticated user. Signing out unmounts and resets the local prototype.
+Authentication uses Supabase; product data remains realistic local mock data. Menu, orders, stock, workplace selection, map movement and service time remain local/simulated. Map tiles require an internet connection. Real GPS, remote push delivery and app-data persistence are deferred. The JP/CV switch is a prototype preview control, not backend authorization; it remains available to every authenticated user. Signing out unmounts and resets the local prototype.
 
 Remote push notifications and background driver location require an Expo development build. Expo Go supports the prototype's map and order flow; notification integration is skipped there so the app can run without the unsupported Android push module.
 
@@ -87,7 +87,7 @@ npx expo-doctor
 
 Automated tests cover auth gating, restoration, invalidation events, logout and failure handling, signup confirmation and metadata, and the App's customer/driver routing with stubbed screens. A real Supabase client is tested with a simulated HTTP server response and AsyncStorage adapter for persistence across client recreation, expired-token refresh and logout clearing. The migration is executed in PGlite (embedded PostgreSQL) with a minimal Supabase auth schema to check profile creation/backfill, forced customer role, own-profile RLS, field restrictions, anonymous denial and auth-user deletion.
 
-Validation on 2026-09-09: all 8 tests, TypeScript, web export and iOS/Android bundle exports passed. Expo Doctor passed 20/21 checks; its only failure is the pre-existing Expo patch mismatch (`57.0.20` installed, `~57.0.21` expected). That unrelated upgrade is deferred.
+Validation on 2026-09-09: all 10 tests, TypeScript, web export and iOS/Android bundle exports passed. Expo Doctor passed 20/21 checks; its only failure is the pre-existing Expo patch mismatch (`57.0.20` installed, `~57.0.21` expected). That unrelated upgrade is deferred.
 
 Live Supabase verification on 2026-09-09 passed in the configured web build:
 

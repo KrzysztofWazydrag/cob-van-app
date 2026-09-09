@@ -9,26 +9,32 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Feather from '@expo/vector-icons/Feather';
+import type { User } from '@supabase/supabase-js';
+import cobSelection from '../../assets/cob-selection.png';
 import { BuildYourOwnModal } from '../components/BuildYourOwnModal';
 import { FoodImage } from '../components/FoodImage';
-import { InVanStockModal } from '../components/InVanStockModal';
+import { InVanStockView } from '../components/InVanStockView';
 import { VanTrackingModal } from '../components/VanTrackingModal';
+import { ProfileScreen } from './ProfileScreen';
 import { reservableCount, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type CustomerScreenProps = {
   buildPricing: BuildYourOwnPricing;
-  favouriteIds: string[];
   inventory: Inventory;
+  onOpenDriverPreview: () => void;
   onReserve: (product: Product, quantity: number, options: string) => void;
-  onRolePress: () => void;
-  onToggleFavourite: (productId: string) => void;
+  onSignOut: () => Promise<void>;
   orders: Order[];
   products: Product[];
+  signOutError: string | null;
+  signingOut: boolean;
   stopMode: boolean;
+  user: User;
 };
 
-type CustomerTab = 'home' | 'favourites' | 'orders';
+type CustomerTab = 'home' | 'inVan' | 'orders' | 'profile';
 
 const sauces = ['No sauce', 'Brown sauce', 'Red sauce'];
 const categories: Array<{ id: Product['category']; label: string }> = [
@@ -44,7 +50,7 @@ const statusLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserve, onRolePress, onToggleFavourite, orders, products, stopMode }: CustomerScreenProps) {
+export function CustomerScreen({ buildPricing, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, signOutError, signingOut, stopMode, user }: CustomerScreenProps) {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Product | null>(null);
   const [sauce, setSauce] = useState(sauces[0]);
@@ -52,7 +58,6 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
   const [reserved, setReserved] = useState(false);
   const [category, setCategory] = useState<Product['category']>('cobs');
   const [tracking, setTracking] = useState(false);
-  const [inVanStock, setInVanStock] = useState(false);
   const [building, setBuilding] = useState(false);
   const [tab, setTab] = useState<CustomerTab>('home');
 
@@ -78,7 +83,6 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
 
   const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
   const visibleProducts = products.filter((product) => product.available && product.category === category);
-  const favouriteProducts = products.filter((product) => product.available && !product.custom && favouriteIds.includes(product.id));
   const customerOrders = orders.filter((order) => order.customer === 'Jamie P.');
 
   const renderProductCard = (product: Product) => {
@@ -89,8 +93,6 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
       : showLowStock
         ? `ONLY ${available} LEFT`
         : product.badge;
-    const favourite = favouriteIds.includes(product.id);
-
     return (
       <Pressable
         accessibilityLabel={`Choose ${product.name}, £${product.price.toFixed(2)}`}
@@ -112,18 +114,7 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
           ) : null}
         </View>
         <View style={styles.productCopy}>
-          <View style={styles.productNameRow}>
-            <Text style={styles.productName}>{product.name}</Text>
-            {!product.custom ? (
-              <Pressable
-                accessibilityLabel={`${favourite ? 'Remove' : 'Add'} ${product.name} ${favourite ? 'from' : 'to'} favourites`}
-                onPress={() => onToggleFavourite(product.id)}
-                style={styles.favouriteButton}
-              >
-                <Text style={[styles.favouriteIcon, favourite && styles.favouriteIconActive]}>{favourite ? '♥' : '♡'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          <Text style={styles.productName}>{product.name}</Text>
           <Text numberOfLines={2} style={styles.productDescription}>{product.description}</Text>
           <View style={styles.productBottom}>
             <Text style={styles.price}>{product.custom ? 'FROM ' : ''}£{product.price.toFixed(2)}</Text>
@@ -139,15 +130,12 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
+        {tab === 'home' ? <View style={styles.topBar}>
           <View>
             <Text style={styles.eyebrow}>MONDAY · ACERO</Text>
             <Text style={styles.greeting}>Morning, Jamie</Text>
           </View>
-          <Pressable accessibilityLabel="Switch to van crew view" onPress={onRolePress} style={styles.avatar}>
-            <Text style={styles.avatarText}>JP</Text>
-          </Pressable>
-        </View>
+        </View> : null}
 
         {tab === 'home' ? (
           <>
@@ -165,7 +153,7 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
         ) : null}
 
         <ImageBackground
-          source={require('../../assets/cob-selection.png')}
+          source={cobSelection}
           imageStyle={styles.heroImage}
           style={styles.hero}
         >
@@ -180,15 +168,6 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>{stopMode ? 'AT ACERO NOW' : 'ON THE WAY'}</Text>
               <Text style={styles.liveLinkIcon}>↗</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="See food ready in the van"
-              accessibilityRole="button"
-              onPress={() => setInVanStock(true)}
-              style={({ pressed }) => [styles.vanStockButton, pressed && styles.heroControlPressed]}
-            >
-              <Text style={styles.vanStockIcon}>🚐</Text>
-              <Text style={styles.vanStockText}>IN THE VAN</Text>
             </Pressable>
           </View>
           <View style={styles.heroCopy}>
@@ -241,25 +220,9 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
         <View style={styles.productList}>{visibleProducts.map(renderProductCard)}</View>
 
           </>
-        ) : tab === 'favourites' ? (
-          <View style={styles.tabScreen}>
-            <Text style={styles.tabEyebrow}>QUICK PICKS</Text>
-            <Text style={styles.tabTitle}>Favourites</Text>
-            <Text style={styles.tabSubtitle}>Tap a meal to reserve it as usual.</Text>
-            {favouriteProducts.length > 0 ? (
-              <View style={styles.productList}>{favouriteProducts.map(renderProductCard)}</View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyIcon}>♡</Text>
-                <Text style={styles.emptyTitle}>No favourites yet</Text>
-                <Text style={styles.emptyBody}>Tap the heart on a menu item to keep it here.</Text>
-                <Pressable onPress={() => setTab('home')} style={styles.emptyButton}>
-                  <Text style={styles.emptyButtonText}>Browse menu</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        ) : (
+        ) : tab === 'inVan' ? (
+          <InVanStockView inventory={inventory} onChoose={openProduct} products={products} />
+        ) : tab === 'orders' ? (
           <View style={styles.tabScreen}>
             <Text style={styles.tabEyebrow}>ACERO · TODAY</Text>
             <Text style={styles.tabTitle}>Your orders</Text>
@@ -299,18 +262,33 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
               </View>
             )}
           </View>
+        ) : (
+          <ProfileScreen
+            onOpenDriverPreview={onOpenDriverPreview}
+            onSignOut={onSignOut}
+            signOutError={signOutError}
+            signingOut={signingOut}
+            user={user}
+          />
         )}
       </ScrollView>
 
       <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'home' }} onPress={() => setTab('home')} style={tab === 'home' ? styles.tabActive : styles.tab}>
-          <Text style={tab === 'home' ? styles.tabIcon : styles.tabIconMuted}>⌂</Text><Text style={tab === 'home' ? styles.tabActiveText : styles.tabText}>Home</Text>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'home' }} onPress={() => setTab('home')} style={styles.tab}>
+          <Feather color={tab === 'home' ? colors.orange : colors.muted} name="home" size={22} strokeWidth={2.2} />
+          <Text style={tab === 'home' ? styles.tabActiveText : styles.tabText}>Home</Text>
         </Pressable>
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'favourites' }} onPress={() => setTab('favourites')} style={tab === 'favourites' ? styles.tabActive : styles.tab}>
-          <Text style={tab === 'favourites' ? styles.tabIcon : styles.tabIconMuted}>♡</Text><Text style={tab === 'favourites' ? styles.tabActiveText : styles.tabText}>Favourites</Text>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'inVan' }} onPress={() => setTab('inVan')} style={styles.tab}>
+          <Feather color={tab === 'inVan' ? colors.orange : colors.muted} name="truck" size={22} strokeWidth={2.2} />
+          <Text style={tab === 'inVan' ? styles.tabActiveText : styles.tabText}>In the van</Text>
         </Pressable>
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'orders' }} onPress={() => setTab('orders')} style={tab === 'orders' ? styles.tabActive : styles.tab}>
-          <Text style={tab === 'orders' ? styles.tabIcon : styles.tabIconMuted}>◷</Text><Text style={tab === 'orders' ? styles.tabActiveText : styles.tabText}>Orders</Text>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'orders' }} onPress={() => setTab('orders')} style={styles.tab}>
+          <Feather color={tab === 'orders' ? colors.orange : colors.muted} name="clipboard" size={22} strokeWidth={2.2} />
+          <Text style={tab === 'orders' ? styles.tabActiveText : styles.tabText}>Orders</Text>
+        </Pressable>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'profile' }} onPress={() => setTab('profile')} style={styles.tab}>
+          <Feather color={tab === 'profile' ? colors.orange : colors.muted} name="user" size={22} strokeWidth={2.2} />
+          <Text style={tab === 'profile' ? styles.tabActiveText : styles.tabText}>Profile</Text>
         </Pressable>
       </View>
 
@@ -381,16 +359,6 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
         pricing={buildPricing}
         visible={building}
       />
-      <InVanStockModal
-        inventory={inventory}
-        onChoose={(product) => {
-          setInVanStock(false);
-          openProduct(product);
-        }}
-        onClose={() => setInVanStock(false)}
-        products={products}
-        visible={inVanStock}
-      />
       <VanTrackingModal onClose={() => setTracking(false)} visible={tracking} />
     </SafeAreaView>
   );
@@ -399,11 +367,9 @@ export function CustomerScreen({ buildPricing, favouriteIds, inventory, onReserv
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: colors.cream, flex: 1 },
   content: { paddingBottom: 116, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xl },
+  topBar: { marginBottom: spacing.xl },
   eyebrow: { color: colors.orange, fontSize: type.tiny, fontWeight: '800', letterSpacing: 1.2 },
   greeting: { color: colors.ink, fontSize: type.title, fontWeight: '800', marginTop: spacing.xs },
-  avatar: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.pill, height: 46, justifyContent: 'center', width: 46 },
-  avatarText: { color: colors.mustard, fontSize: type.label, fontWeight: '800' },
   successCard: { alignItems: 'center', backgroundColor: colors.greenSoft, borderRadius: radius.md, flexDirection: 'row', marginBottom: spacing.md, padding: spacing.md },
   successIcon: { alignItems: 'center', backgroundColor: colors.green, borderRadius: radius.pill, height: 34, justifyContent: 'center', width: 34 },
   successIconText: { color: colors.paper, fontSize: type.body, fontWeight: '900' },
@@ -414,14 +380,11 @@ const styles = StyleSheet.create({
   hero: { height: 272, justifyContent: 'space-between', marginBottom: spacing.xxl, overflow: 'hidden', padding: spacing.lg },
   heroImage: { borderRadius: radius.lg },
   heroShade: { backgroundColor: 'rgba(13,27,42,0.38)', borderRadius: radius.lg, bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
-  heroTopRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', zIndex: 1 },
+  heroTopRow: { alignItems: 'center', flexDirection: 'row', zIndex: 1 },
   livePill: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: radius.pill, flexDirection: 'row', minHeight: spacing.xxxl + spacing.sm, paddingHorizontal: spacing.md },
   liveDot: { backgroundColor: colors.green, borderRadius: radius.pill, height: 8, marginRight: spacing.sm, width: 8 },
   liveText: { color: colors.ink, fontSize: type.tiny, fontWeight: '900', letterSpacing: 0.8 },
   liveLinkIcon: { color: colors.orange, fontSize: type.body, fontWeight: '900', marginLeft: spacing.sm },
-  vanStockButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, flexDirection: 'row', minHeight: spacing.xxxl + spacing.sm, paddingHorizontal: spacing.md },
-  vanStockIcon: { fontSize: type.body, marginRight: spacing.xs },
-  vanStockText: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   heroControlPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
   heroCopy: { zIndex: 1 },
   heroTitle: { color: colors.paper, fontSize: type.hero, fontWeight: '900', letterSpacing: -0.8 },
@@ -454,11 +417,7 @@ const styles = StyleSheet.create({
   badgeUrgent: { backgroundColor: colors.red },
   badgeText: { color: colors.paper, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   productCopy: { flex: 1, justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  productNameRow: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
   productName: { color: colors.ink, flex: 1, fontSize: type.body, fontWeight: '900', paddingRight: spacing.xs },
-  favouriteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 36, minWidth: 36, marginRight: -spacing.sm, marginTop: -spacing.sm },
-  favouriteIcon: { color: colors.muted, fontSize: type.title },
-  favouriteIconActive: { color: colors.orange },
   productDescription: { color: colors.muted, fontSize: type.tiny, lineHeight: 18 },
   productBottom: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   price: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
@@ -496,9 +455,6 @@ const styles = StyleSheet.create({
   collectionTime: { color: colors.muted, fontSize: type.tiny, marginTop: spacing.xs },
   tabBar: { backgroundColor: colors.paper, borderTopColor: colors.line, borderTopWidth: 1, bottom: 0, flexDirection: 'row', left: 0, paddingBottom: spacing.lg, paddingTop: spacing.md, position: 'absolute', right: 0 },
   tab: { alignItems: 'center', flex: 1, gap: spacing.xs },
-  tabActive: { alignItems: 'center', flex: 1, gap: spacing.xs },
-  tabIcon: { color: colors.orange, fontSize: type.title, fontWeight: '900' },
-  tabIconMuted: { color: colors.muted, fontSize: type.title },
   tabActiveText: { color: colors.ink, fontSize: type.tiny, fontWeight: '800' },
   tabText: { color: colors.muted, fontSize: type.tiny, fontWeight: '700' },
   modalBackdrop: { backgroundColor: 'rgba(13,27,42,0.56)', flex: 1, justifyContent: 'flex-end' },

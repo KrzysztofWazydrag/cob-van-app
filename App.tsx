@@ -3,6 +3,7 @@ import { AuthGate } from './src/auth/AuthGate';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import type { User } from '@supabase/supabase-js';
 import { CustomerScreen } from './src/screens/CustomerScreen';
 import { DriverScreen } from './src/screens/DriverScreen';
 import type { Role } from './src/components/RoleSwitch';
@@ -104,13 +105,20 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthGate>
-        <CobVanPrototype />
+        {({ session, signOut, signOutError, signingOut }) => (
+          <CobVanPrototype
+            onSignOut={signOut}
+            signOutError={signOutError}
+            signingOut={signingOut}
+            user={session.user}
+          />
+        )}
       </AuthGate>
     </SafeAreaProvider>
   );
 }
 
-function CobVanPrototype() {
+function CobVanPrototype({ onSignOut, signOutError, signingOut, user }: { onSignOut: () => Promise<void>; signOutError: string | null; signingOut: boolean; user: User }) {
   const [role, setRole] = useState<Role>('customer');
   const [{ inventory, walkUpSales }, dispatchStock] = useReducer(stockReducer, {
     inventory: initialInventory,
@@ -120,17 +128,10 @@ function CobVanPrototype() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [buildPricing, setBuildPricing] = useState<BuildYourOwnPricing>(initialBuildYourOwnPricing);
   const [stopMode, setStopMode] = useState(false);
-  const [favouriteIds, setFavouriteIds] = useState<string[]>(['bacon-egg', 'breakfast-wrap']);
 
   const pricedProducts = useMemo(() => products.map((product) => (
     product.custom ? { ...product, price: buildPricing.bases.Cob } : product
   )), [buildPricing.bases.Cob, products]);
-
-  const toggleFavourite = (productId: string) => {
-    setFavouriteIds((current) => current.includes(productId)
-      ? current.filter((id) => id !== productId)
-      : [...current, productId]);
-  };
 
   const reserveProduct = (product: Product, quantity: number, options: string) => {
     const currentProduct = pricedProducts.find((item) => item.id === product.id);
@@ -217,14 +218,16 @@ function CobVanPrototype() {
       {role === 'customer' ? (
         <CustomerScreen
           buildPricing={buildPricing}
-          favouriteIds={favouriteIds}
           inventory={inventory}
+          onOpenDriverPreview={() => setRole('driver')}
           onReserve={reserveProduct}
-          onRolePress={() => setRole('driver')}
-          onToggleFavourite={toggleFavourite}
+          onSignOut={onSignOut}
           orders={orders}
           products={pricedProducts}
           stopMode={stopMode}
+          signOutError={signOutError}
+          signingOut={signingOut}
+          user={user}
         />
       ) : (
         <DriverScreen

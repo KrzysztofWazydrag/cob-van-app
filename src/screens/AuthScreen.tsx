@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import Feather from '@expo/vector-icons/Feather';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import authHero from '../../assets/auth-hero.png';
 import { colors, radius, shadow, spacing, type } from '../theme';
@@ -23,6 +24,7 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<AuthField | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
   function toggleMode() {
     setSignUp((current) => !current);
     setPassword('');
+    setShowPassword(false);
     setError(null);
     setMessage(null);
   }
@@ -95,7 +98,6 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Display name</Text>
                 <View style={[styles.inputShell, focusedField === 'displayName' && styles.inputShellFocused]}>
-                  <Text style={styles.inputIcon}>●</Text>
                   <TextInput
                     accessibilityLabel="Display name"
                     autoComplete="name"
@@ -116,7 +118,6 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={[styles.inputShell, focusedField === 'email' && styles.inputShellFocused]}>
-                <Text style={styles.inputIcon}>✉</Text>
                 <TextInput
                   accessibilityLabel="Email"
                   autoCapitalize="none"
@@ -138,7 +139,6 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputShell, focusedField === 'password' && styles.inputShellFocused]}>
-                <Text style={styles.inputIcon}>◆</Text>
                 <TextInput
                   accessibilityLabel="Password"
                   autoCapitalize="none"
@@ -152,10 +152,21 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
                   placeholder="Enter your password"
                   placeholderTextColor={colors.muted}
                   returnKeyType="go"
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   style={styles.input}
                   value={password}
                 />
+                <Pressable
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
+                  hitSlop={8}
+                  onPress={() => setShowPassword((visible) => !visible)}
+                  style={styles.visibilityButton}
+                >
+                  <Feather color={colors.muted} name={showPassword ? 'eye-off' : 'eye'} size={20} />
+                </Pressable>
               </View>
             </View>
 
@@ -202,10 +213,10 @@ const styles = StyleSheet.create({
   description: { color: colors.muted, fontSize: type.body, lineHeight: type.title + spacing.xs, marginBottom: spacing.xl, marginTop: spacing.sm },
   fieldGroup: { marginBottom: spacing.lg },
   label: { color: colors.ink, fontSize: type.body, fontWeight: '800', marginBottom: spacing.sm },
-  inputShell: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', minHeight: spacing.xxxl + spacing.xxl, paddingHorizontal: spacing.lg, ...shadow },
-  inputShellFocused: { borderColor: colors.mustardDark, borderWidth: 2 },
-  inputIcon: { color: colors.muted, fontSize: type.title, marginRight: spacing.md, width: spacing.xl },
+  inputShell: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', minHeight: spacing.xxxl + spacing.xxl, paddingHorizontal: spacing.lg },
+  inputShellFocused: { backgroundColor: '#FFFCF4', borderColor: colors.mustardDark },
   input: { color: colors.ink, flex: 1, fontSize: type.body, minHeight: spacing.xxxl + spacing.xxl, paddingVertical: spacing.md },
+  visibilityButton: { alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm, minHeight: 44, minWidth: 44 },
   error: { color: colors.red, fontSize: type.label, marginBottom: spacing.md },
   message: { color: colors.green, fontSize: type.label, lineHeight: type.title, marginBottom: spacing.md },
   primary: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: spacing.xxxl + spacing.xxl, paddingHorizontal: spacing.xl, ...shadow },

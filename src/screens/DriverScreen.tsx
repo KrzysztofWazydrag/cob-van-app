@@ -58,9 +58,11 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
           <Text style={styles.eyebrow}>THE COB VAN · MONDAY</Text>
           <Text style={styles.title}>Next stop</Text>
         </View>
-        <Pressable accessibilityLabel="Switch to customer view" onPress={onRolePress} style={styles.crewAvatar}>
-          <Text style={styles.crewAvatarText}>CV</Text>
-        </Pressable>
+        {__DEV__ ? (
+          <Pressable accessibilityLabel="Return to customer preview" onPress={onRolePress} style={styles.devExitButton}>
+            <Text style={styles.devExitText}>DEV · CUSTOMER</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -294,8 +296,8 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', backgroundColor: colors.ink, flexDirection: 'row', justifyContent: 'space-between', paddingBottom: spacing.xxl, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   eyebrow: { color: colors.mustard, fontSize: type.tiny, fontWeight: '800', letterSpacing: 1.1 },
   title: { color: colors.paper, fontSize: type.hero, fontWeight: '900', marginTop: spacing.xs },
-  crewAvatar: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, height: 48, justifyContent: 'center', width: 48 },
-  crewAvatarText: { color: colors.ink, fontSize: type.label, fontWeight: '900' },
+  devExitButton: { alignItems: 'center', borderColor: colors.mustard, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 40, paddingHorizontal: spacing.md },
+  devExitText: { color: colors.mustard, fontSize: type.tiny, fontWeight: '900', letterSpacing: 0.5 },
   content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.lg },
   stopCard: { backgroundColor: colors.paper, borderRadius: radius.lg, marginTop: -spacing.lg, padding: spacing.lg, ...shadow },
   stopTop: { alignItems: 'center', flexDirection: 'row' },

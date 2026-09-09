@@ -1,13 +1,20 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, Pressable, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { AuthScreen } from '../screens/AuthScreen';
-import { colors, radius, shadow, spacing, type } from '../theme';
+import { colors, radius, spacing, type } from '../theme';
 
-export function AuthGate({ children }: { children: ReactNode }) {
+export type AuthenticatedAppProps = {
+  session: Session;
+  signOut: () => Promise<void>;
+  signOutError: string | null;
+  signingOut: boolean;
+};
+
+export function AuthGate({ children }: { children: (auth: AuthenticatedAppProps) => ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,26 +106,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (!session) return <AuthScreen client={supabase} />;
 
-  return (
-    <View key={session.user.id} style={styles.app}>
-      <View style={styles.app}>{children}</View>
-      {error ? <Text accessibilityRole="alert" style={styles.errorBanner}>{error}</Text> : null}
-      <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.account}>
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: signingOut, busy: signingOut }} disabled={signingOut} onPress={signOut} style={styles.button}>
-          <Text style={styles.buttonText}>{signingOut ? 'Logging out…' : 'Log out'}</Text>
-        </Pressable>
-      </SafeAreaView>
-    </View>
-  );
+  return children({ session, signOut, signOutError: error, signingOut });
 }
 
 const styles = StyleSheet.create({
-  app: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16, backgroundColor: colors.cream },
   title: { fontSize: 32, fontWeight: '900', color: colors.ink },
   message: { color: colors.ink, textAlign: 'center', fontSize: 16 },
-  account: { position: 'absolute', right: spacing.xxxl + spacing.xxl + spacing.sm, top: 0 },
-  button: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: spacing.xxxl, paddingHorizontal: spacing.md, ...shadow },
+  button: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: spacing.xxxl, paddingHorizontal: spacing.md },
   buttonText: { color: colors.ink, fontSize: type.tiny, fontWeight: '800' },
-  errorBanner: { backgroundColor: colors.paper, borderRadius: radius.sm, bottom: spacing.lg, color: colors.red, left: spacing.lg, padding: spacing.md, position: 'absolute', right: spacing.lg, textAlign: 'center', zIndex: 2, ...shadow },
 });
