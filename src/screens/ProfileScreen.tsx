@@ -18,7 +18,7 @@ type ProfileScreenProps = {
 export function ProfileScreen({ onOpenDriverPreview, onSignOut, profile, profileError, signOutError, signingOut, user }: ProfileScreenProps) {
   const displayName = profile.displayName;
   const initials = useMemo(() => displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'CV', [displayName]);
-  const workplace = profile.workplaceId ? `Assigned · ${profile.workplaceId.slice(0, 8)}` : 'Not assigned';
+  const workplace = profile.workplaceName || (profile.workplaceId ? 'Assigned workplace' : 'Not assigned');
   const role = profile.role;
 
   return (

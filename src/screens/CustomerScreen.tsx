@@ -55,6 +55,8 @@ const statusLabels: Record<OrderStatus, string> = {
 };
 
 export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, stopMode, user }: CustomerScreenProps) {
+  const workplaceName = profile.workplaceName || 'Your workplace';
+  const weekday = new Date().toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Product | null>(null);
   const [sauce, setSauce] = useState(sauces[0]);
@@ -136,7 +138,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {tab === 'home' ? <View style={styles.topBar}>
           <View>
-            <Text style={styles.eyebrow}>MONDAY · ACERO</Text>
+            <Text style={styles.eyebrow}>{weekday} · {workplaceName}</Text>
             <Text style={styles.greeting}>Morning, {displayName}</Text>
           </View>
         </View> : null}
@@ -148,7 +150,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
             <View style={styles.successIcon}><Text style={styles.successIconText}>✓</Text></View>
             <View style={styles.successCopy}>
               <Text style={styles.successTitle}>Your food is reserved</Text>
-              <Text style={styles.successBody}>Collect at Acero · 10:15–10:25</Text>
+              <Text style={styles.successBody}>Collect at {workplaceName} · 10:15–10:25</Text>
             </View>
             <Pressable accessibilityLabel="Dismiss reservation message" onPress={() => setReserved(false)}>
               <Text style={styles.closeText}>×</Text>
@@ -164,13 +166,13 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
           <View style={styles.heroShade} />
           <View style={styles.heroTopRow}>
             <Pressable
-              accessibilityLabel={`${stopMode ? 'At Acero now' : 'On the way'}. Track the van on the map`}
+              accessibilityLabel={`${stopMode ? `At ${workplaceName} now` : 'On the way'}. Track the van on the map`}
               accessibilityRole="button"
               onPress={() => setTracking(true)}
               style={({ pressed }) => [styles.livePill, pressed && styles.heroControlPressed]}
             >
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>{stopMode ? 'AT ACERO NOW' : 'ON THE WAY'}</Text>
+              <Text style={styles.liveText}>{stopMode ? `AT ${workplaceName.toUpperCase()} NOW` : 'ON THE WAY'}</Text>
               <Text style={styles.liveLinkIcon}>↗</Text>
             </Pressable>
           </View>
@@ -191,7 +193,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
           <View style={styles.cutoffClock}><Text style={styles.cutoffClockText}>◷</Text></View>
           <View style={styles.cutoffCopy}>
             <Text style={styles.cutoffTitle}>Breakfast orders close at 9:45</Text>
-            <Text style={styles.cutoffBody}>18 minutes left to reserve for Acero</Text>
+            <Text style={styles.cutoffBody}>18 minutes left to reserve for {workplaceName}</Text>
           </View>
         </View>
 
@@ -228,7 +230,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
           <InVanStockView inventory={inventory} onChoose={openProduct} products={products} />
         ) : tab === 'orders' ? (
           <View style={styles.tabScreen}>
-            <Text style={styles.tabEyebrow}>ACERO · TODAY</Text>
+            <Text style={styles.tabEyebrow}>{workplaceName} · TODAY</Text>
             <Text style={styles.tabTitle}>Your orders</Text>
             <Text style={styles.tabSubtitle}>Current and recent reservations.</Text>
             {customerOrders.length > 0 ? (
@@ -248,7 +250,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
                         <Text style={[styles.customerStatusText, order.status === 'ready' && styles.customerStatusTextReady]}>{statusLabels[order.status]}</Text>
                       </View>
                       <View style={styles.collectionCopy}>
-                        <Text style={styles.collectionLocation}>Acero</Text>
+                        <Text style={styles.collectionLocation}>{workplaceName}</Text>
                         <Text style={styles.collectionTime}>10:15–10:25</Text>
                       </View>
                     </View>

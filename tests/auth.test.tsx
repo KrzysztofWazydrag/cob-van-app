@@ -3,6 +3,8 @@ import { act, create } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  profileState: { error: null as string | null, loading: false, reload: vi.fn(), profile: { displayName: 'Kris', role: 'customer', workplaceId: 'workplace-1' as string | null, workplaceName: 'ACERO' as string | null } },
   listener: null as null | ((event: string, session: unknown) => void),
   appStateListener: null as null | ((state: string) => void),
   auth: {
@@ -12,8 +14,8 @@ const mocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(), remove: vi.fn(),
   openURL: vi.fn(),
 }));
-vi.mock('../src/lib/supabase', () => ({ supabase: { auth: mocks.auth } }));
-vi.mock('../src/auth/useCurrentProfile', () => ({ useCurrentProfile: () => ({ error: null, profile: { displayName: 'Kris', role: 'customer', workplaceId: null } }) }));
+vi.mock('../src/lib/supabase', () => ({ supabase: { auth: mocks.auth, rpc: mocks.rpc } }));
+vi.mock('../src/auth/useCurrentProfile', () => ({ useCurrentProfile: () => mocks.profileState }));
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Pressable: 'Pressable', Text: 'Text', View: 'View',
   KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', TextInput: 'TextInput',
@@ -53,6 +55,10 @@ const fill = async (label: string, value: string) => {
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  mocks.profileState.error = null;
+  mocks.profileState.loading = false;
+  mocks.profileState.profile.workplaceId = 'workplace-1';
+  mocks.profileState.profile.workplaceName = 'ACERO';
   mocks.auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
   mocks.auth.onAuthStateChange.mockImplementation((listener) => {
     mocks.listener = listener;
@@ -157,4 +163,51 @@ test('App opens the customer prototype after authentication and preserves the dr
   expect(text()).toContain('Driver prototype');
   await press('Driver prototype');
   expect(text()).toContain('Customer prototype');
+});
+
+
+test('customer without membership must join, validates errors, then reloads the persisted profile', async () => {
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  mocks.profileState.profile.workplaceId = null;
+  mocks.profileState.profile.workplaceName = null;
+  await act(async () => { tree = create(<App />); });
+  expect(text()).toContain('Join your workplace');
+  expect(text()).not.toContain('Customer prototype');
+  await press('Join workplace');
+  expect(text()).toContain('Enter your workplace code.');
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  await fill('Workplace code', 'BAD');
+  mocks.rpc.mockResolvedValueOnce({ error: { code: 'P0001' } });
+  await press('Join workplace');
+  expect(text()).toContain("We couldn't find that workplace code.");
+  expect(mocks.profileState.reload).not.toHaveBeenCalled();
+  mocks.rpc.mockRejectedValueOnce(new Error('Offline'));
+  await press('Join workplace');
+  expect(text()).toContain('Check your connection');
+  await fill('Workplace code', '  ACERO123  ');
+  mocks.rpc.mockResolvedValueOnce({ error: null });
+  await press('Join workplace');
+  expect(mocks.rpc).toHaveBeenLastCalledWith('join_workplace', { workplace_code: 'ACERO123' });
+  expect(mocks.profileState.reload).toHaveBeenCalledOnce();
+  mocks.profileState.profile.workplaceId = 'workplace-1';
+  mocks.profileState.profile.workplaceName = 'ACERO';
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Customer prototype');
+  expect(text()).not.toContain('Join your workplace');
+});
+
+test('profile loading and failures block onboarding and customer content with retry available', async () => {
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  mocks.profileState.loading = true;
+  await act(async () => { tree = create(<App />); });
+  expect(text()).toContain('Loading your profile');
+  expect(text()).not.toContain('Join your workplace');
+  expect(text()).not.toContain('Customer prototype');
+  mocks.profileState.loading = false;
+  mocks.profileState.error = 'Profile details are temporarily unavailable.';
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('temporarily unavailable');
+  await press('Try again');
+  expect(mocks.profileState.reload).toHaveBeenCalledOnce();
+  expect(text()).not.toContain('Customer prototype');
 });

@@ -2,9 +2,10 @@ import { useMemo, useReducer, useState } from 'react';
 import { AuthGate, type AuthenticatedAppProps } from './src/auth/AuthGate';
 import { type CurrentProfile, useCurrentProfile } from './src/auth/useCurrentProfile';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { User } from '@supabase/supabase-js';
+import { WorkplaceOnboardingScreen } from './src/screens/WorkplaceOnboardingScreen';
 import { CustomerScreen } from './src/screens/CustomerScreen';
 import { DriverScreen } from './src/screens/DriverScreen';
 import type { Role } from './src/components/RoleSwitch';
@@ -106,14 +107,29 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthGate>
-        {(auth) => <AuthenticatedCobVanApp {...auth} />}
+        {(auth) => <AuthenticatedCobVanApp key={auth.session.user.id} {...auth} />}
       </AuthGate>
     </SafeAreaProvider>
   );
 }
 
 function AuthenticatedCobVanApp({ session, signOut, signOutError, signingOut }: AuthenticatedAppProps) {
-  const { error: profileError, profile } = useCurrentProfile(session.user);
+  const { error: profileError, profile, loading, reload } = useCurrentProfile(session.user);
+  if (loading || profileError) {
+    return (
+      <SafeAreaView style={styles.profileStatus}>
+        <StatusBar style="dark" />
+        {loading ? <ActivityIndicator color={colors.ink} /> : null}
+        <Text accessibilityRole={profileError ? 'alert' : undefined}>{profileError || 'Loading your profile…'}</Text>
+        {profileError ? <Pressable accessibilityRole="button" onPress={reload} style={styles.retry}><Text>Try again</Text></Pressable> : null}
+        {signOutError ? <Text accessibilityRole="alert">{signOutError}</Text> : null}
+        <Pressable accessibilityRole="button" disabled={signingOut} onPress={signOut} style={styles.retry}><Text>{signingOut ? 'Logging out…' : 'Log out'}</Text></Pressable>
+      </SafeAreaView>
+    );
+  }
+  if (profile.role === 'customer' && !profile.workplaceId) {
+    return <WorkplaceOnboardingScreen onJoined={reload} onSignOut={signOut} signingOut={signingOut} signOutError={signOutError} />;
+  }
   return (
     <CobVanPrototype
       onSignOut={signOut}
@@ -263,6 +279,8 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
 }
 
 const styles = StyleSheet.create({
+  profileStatus: { flex: 1, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  retry: { padding: 16, backgroundColor: colors.mustard, borderRadius: 24 },
   app: {
     backgroundColor: colors.cream,
     flex: 1,

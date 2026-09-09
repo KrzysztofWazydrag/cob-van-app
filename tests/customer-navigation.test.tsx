@@ -36,7 +36,7 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
         onSignOut={mocks.onSignOut}
         orders={orders}
         products={products}
-        profile={{ displayName: 'Kris', role: 'customer', workplaceId: null }}
+        profile={{ displayName: 'Kris', role: 'customer', workplaceId: 'workplace-1', workplaceName: 'ACERO' }}
         profileError={null}
         signOutError={null}
         signingOut={false}
@@ -71,7 +71,7 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
   await pressText('Profile');
   expect(renderedText()).toContain('Kris');
   expect(renderedText()).toContain('jamie@example.com');
-  expect(renderedText()).toContain('Not assigned');
+  expect(renderedText()).toContain('ACERO');
   await pressText('Log out');
   expect(mocks.onSignOut).toHaveBeenCalledOnce();
   await pressText('Open van crew view');
