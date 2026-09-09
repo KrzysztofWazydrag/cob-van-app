@@ -1,49 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import type { CurrentProfile } from '../auth/useCurrentProfile';
 import { colors, radius, spacing, type } from '../theme';
-
-type ProfileRow = {
-  display_name: string | null;
-  role: 'customer' | 'owner' | 'driver';
-  workplace_id: string | null;
-};
 
 type ProfileScreenProps = {
   onOpenDriverPreview: () => void;
   onSignOut: () => Promise<void>;
+  profile: CurrentProfile;
+  profileError: string | null;
   signOutError: string | null;
   signingOut: boolean;
   user: User;
 };
 
-export function ProfileScreen({ onOpenDriverPreview, onSignOut, signOutError, signingOut, user }: ProfileScreenProps) {
-  const fallbackName = typeof user.user_metadata.display_name === 'string' ? user.user_metadata.display_name : 'Cob Van customer';
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    if (!supabase) return;
-    supabase
-      .from('profiles')
-      .select('display_name, role, workplace_id')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) setProfileError('Profile details are temporarily unavailable.');
-        else setProfile(data as ProfileRow | null);
-      });
-    return () => { active = false; };
-  }, [user.id]);
-
-  const displayName = profile?.display_name?.trim() || fallbackName;
+export function ProfileScreen({ onOpenDriverPreview, onSignOut, profile, profileError, signOutError, signingOut, user }: ProfileScreenProps) {
+  const displayName = profile.displayName;
   const initials = useMemo(() => displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'CV', [displayName]);
-  const workplace = profile?.workplace_id ? `Assigned · ${profile.workplace_id.slice(0, 8)}` : 'Not assigned';
-  const role = profile?.role || 'customer';
+  const workplace = profile.workplaceId ? `Assigned · ${profile.workplaceId.slice(0, 8)}` : 'Not assigned';
+  const role = profile.role;
 
   return (
     <View style={styles.screen}>

@@ -6,10 +6,6 @@ const mocks = vi.hoisted(() => ({
   onOpenDriverPreview: vi.fn(),
   onReserve: vi.fn(),
   onSignOut: vi.fn(),
-  profileQuery: vi.fn().mockResolvedValue({
-    data: { display_name: 'Jamie Parker', role: 'customer', workplace_id: null },
-    error: null,
-  }),
 }));
 
 vi.mock('react-native', () => ({
@@ -21,11 +17,6 @@ vi.mock('@expo/vector-icons/Feather', () => ({ default: 'Feather' }));
 vi.mock('../src/components/FoodImage', () => ({ FoodImage: () => React.createElement('FoodImage') }));
 vi.mock('../src/components/BuildYourOwnModal', () => ({ BuildYourOwnModal: ({ visible }: { visible: boolean }) => visible ? React.createElement('Text', {}, 'Build your own open') : null }));
 vi.mock('../src/components/VanTrackingModal', () => ({ VanTrackingModal: ({ visible }: { visible: boolean }) => visible ? React.createElement('Text', {}, 'Tracking open') : null }));
-vi.mock('../src/lib/supabase', () => ({
-  supabase: {
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: mocks.profileQuery }) }) }),
-  },
-}));
 
 import { initialBuildYourOwnPricing, initialInventory, orders, products } from '../src/data';
 import { CustomerScreen } from '../src/screens/CustomerScreen';
@@ -38,12 +29,15 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
     tree = create(
       <CustomerScreen
         buildPricing={initialBuildYourOwnPricing}
+        displayName="Kris"
         inventory={initialInventory}
         onOpenDriverPreview={mocks.onOpenDriverPreview}
         onReserve={mocks.onReserve}
         onSignOut={mocks.onSignOut}
         orders={orders}
         products={products}
+        profile={{ displayName: 'Kris', role: 'customer', workplaceId: null }}
+        profileError={null}
         signOutError={null}
         signingOut={false}
         stopMode={false}
@@ -59,6 +53,7 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
     await act(async () => button.props.onPress());
   };
 
+  expect(tree.root.findAllByType('Text' as never).some((node) => Array.isArray(node.props.children) && node.props.children.join('') === 'Morning, Kris')).toBe(true);
   expect(renderedText()).toContain('Home');
   expect(renderedText()).toContain('In the van');
   expect(renderedText()).toContain('Orders');
@@ -74,7 +69,7 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
   await pressText('Orders');
   expect(renderedText()).toContain('Your orders');
   await pressText('Profile');
-  expect(renderedText()).toContain('Jamie Parker');
+  expect(renderedText()).toContain('Kris');
   expect(renderedText()).toContain('jamie@example.com');
   expect(renderedText()).toContain('Not assigned');
   await pressText('Log out');

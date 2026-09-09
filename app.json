@@ -2,6 +2,7 @@
   "expo": {
     "name": "Cob Van",
     "slug": "cob-van",
+    "scheme": "cobvan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/cob-van-icon.png",

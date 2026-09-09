@@ -1,5 +1,6 @@
 import { useMemo, useReducer, useState } from 'react';
-import { AuthGate } from './src/auth/AuthGate';
+import { AuthGate, type AuthenticatedAppProps } from './src/auth/AuthGate';
+import { type CurrentProfile, useCurrentProfile } from './src/auth/useCurrentProfile';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -105,20 +106,27 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthGate>
-        {({ session, signOut, signOutError, signingOut }) => (
-          <CobVanPrototype
-            onSignOut={signOut}
-            signOutError={signOutError}
-            signingOut={signingOut}
-            user={session.user}
-          />
-        )}
+        {(auth) => <AuthenticatedCobVanApp {...auth} />}
       </AuthGate>
     </SafeAreaProvider>
   );
 }
 
-function CobVanPrototype({ onSignOut, signOutError, signingOut, user }: { onSignOut: () => Promise<void>; signOutError: string | null; signingOut: boolean; user: User }) {
+function AuthenticatedCobVanApp({ session, signOut, signOutError, signingOut }: AuthenticatedAppProps) {
+  const { error: profileError, profile } = useCurrentProfile(session.user);
+  return (
+    <CobVanPrototype
+      onSignOut={signOut}
+      profile={profile}
+      profileError={profileError}
+      signOutError={signOutError}
+      signingOut={signingOut}
+      user={session.user}
+    />
+  );
+}
+
+function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signingOut, user }: { onSignOut: () => Promise<void>; profile: CurrentProfile; profileError: string | null; signOutError: string | null; signingOut: boolean; user: User }) {
   const [role, setRole] = useState<Role>('customer');
   const [{ inventory, walkUpSales }, dispatchStock] = useReducer(stockReducer, {
     inventory: initialInventory,
@@ -144,8 +152,8 @@ function CobVanPrototype({ onSignOut, signOutError, signingOut, user }: { onSign
       {
         id: `local-${Date.now()}`,
         orderNumber: Math.max(...current.map((order) => order.orderNumber), 100) + 1,
-        customer: 'Jamie P.',
-        initials: 'JP',
+        customer: profile.displayName,
+        initials: profile.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'CV',
         productId: product.id,
         itemName: orderedProduct.name,
         quantity,
@@ -218,12 +226,15 @@ function CobVanPrototype({ onSignOut, signOutError, signingOut, user }: { onSign
       {role === 'customer' ? (
         <CustomerScreen
           buildPricing={buildPricing}
+          displayName={profile.displayName}
           inventory={inventory}
           onOpenDriverPreview={() => setRole('driver')}
           onReserve={reserveProduct}
           onSignOut={onSignOut}
           orders={orders}
           products={pricedProducts}
+          profile={profile}
+          profileError={profileError}
           stopMode={stopMode}
           signOutError={signOutError}
           signingOut={signingOut}

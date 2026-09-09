@@ -20,11 +20,11 @@ test('migration creates customer profiles and enforces ownership and column rest
       insert into auth.users values ('${first}', '{"display_name":"Existing customer"}');
     `);
     await db.exec(await readFile(new URL('../supabase/migrations/20260909000100_auth_foundation.sql', import.meta.url), 'utf8'));
-    await db.exec(`insert into auth.users values ('${second}', '{"display_name":"New customer","role":"owner"}');`);
+    await db.exec(`insert into auth.users values ('${second}', '{"display_name":"Kris","role":"owner"}');`);
     await db.exec(`insert into auth.users values ('${third}', '{"display_name":"Future driver","role":"driver"}');`);
     const { rows } = await db.query('select * from public.profiles order by id');
     expect(rows).toHaveLength(3);
-    expect(rows[1]).toMatchObject({ id: second, display_name: 'New customer', role: 'customer', van_id: null, workplace_id: null });
+    expect(rows[1]).toMatchObject({ id: second, display_name: 'Kris', role: 'customer', van_id: null, workplace_id: null });
     expect(rows[2]).toMatchObject({ id: third, display_name: 'Future driver', role: 'customer', van_id: null, workplace_id: null });
     expect(rows[1].created_at).toBeTruthy();
     const rls = await db.query("select relrowsecurity from pg_class where oid in ('public.profiles'::regclass, 'public.vans'::regclass, 'public.workplaces'::regclass)");

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   openURL: vi.fn(),
 }));
 vi.mock('../src/lib/supabase', () => ({ supabase: { auth: mocks.auth } }));
+vi.mock('../src/auth/useCurrentProfile', () => ({ useCurrentProfile: () => ({ error: null, profile: { displayName: 'Kris', role: 'customer', workplaceId: null } }) }));
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Pressable: 'Pressable', Text: 'Text', View: 'View',
   KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', TextInput: 'TextInput',
@@ -23,7 +24,7 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('@expo/vector-icons/Feather', () => ({ default: 'Feather' }));
-vi.mock('../src/screens/CustomerScreen', () => ({ CustomerScreen: ({ onOpenDriverPreview }: { onOpenDriverPreview: () => void }) => React.createElement('Pressable', { onPress: onOpenDriverPreview }, React.createElement('Text', {}, 'Customer prototype')) }));
+vi.mock('../src/screens/CustomerScreen', () => ({ CustomerScreen: ({ displayName, onOpenDriverPreview }: { displayName: string; onOpenDriverPreview: () => void }) => React.createElement('Pressable', { onPress: onOpenDriverPreview }, React.createElement('Text', {}, 'Customer prototype'), React.createElement('Text', {}, `Morning, ${displayName}`)) }));
 vi.mock('../src/screens/DriverScreen', () => ({ DriverScreen: ({ onRolePress }: { onRolePress: () => void }) => React.createElement('Pressable', { onPress: onRolePress }, React.createElement('Text', {}, 'Driver prototype')) }));
 vi.mock('../src/notifications', () => ({ notifyVanArrived: vi.fn() }));
 import App from '../App';
@@ -131,12 +132,16 @@ test('sign up supplies display name and handles email confirmation without a ses
   await press('Are you a van owner?');
   expect(text()).toContain('Owner accounts are set up manually');
   expect(mocks.openURL).toHaveBeenCalledWith('mailto:sitecrew.cc@gmail.com?subject=Cob%20Van%20owner%20onboarding');
-  await fill('Display name', ' Jamie ');
+  await fill('Display name', ' Kris ');
   await fill('Email', 'jamie@example.com');
   await fill('Password', 'password123');
   await press('Create account');
-  expect(mocks.auth.signUp).toHaveBeenCalledWith({ email: 'jamie@example.com', password: 'password123', options: { data: { display_name: 'Jamie' } } });
-  expect(text()).toContain('Check your email');
+  expect(mocks.auth.signUp).toHaveBeenCalledWith({
+    email: 'jamie@example.com',
+    password: 'password123',
+    options: { data: { display_name: 'Kris' }, emailRedirectTo: 'cobvan://auth/callback' },
+  });
+  expect(text()).toContain('Check your email to confirm your account, then return to Cob Van to sign in.');
   expect(tree.root.findByProps({ accessibilityLabel: 'Password' }).props.value).toBe('');
 });
 
@@ -147,6 +152,7 @@ test('App opens the customer prototype after authentication and preserves the dr
   expect(text()).not.toContain('Customer prototype');
   await act(async () => mocks.listener?.('SIGNED_IN', session));
   expect(text()).toContain('Customer prototype');
+  expect(text()).toContain('Morning, Kris');
   await press('Customer prototype');
   expect(text()).toContain('Driver prototype');
   await press('Driver prototype');

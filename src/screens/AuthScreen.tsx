@@ -46,13 +46,16 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
         const { data, error: authError } = await client.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { display_name: displayName.trim() } },
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: 'cobvan://auth/callback',
+          },
         });
         if (authError) throw authError;
         setPassword('');
         if (!data.session) {
           setSignUp(false);
-          setMessage('Check your email to confirm your account, then return here to sign in.');
+          setMessage('Check your email to confirm your account, then return to Cob Van to sign in.');
         }
       } else {
         const { error: authError } = await client.auth.signInWithPassword({ email: email.trim(), password });

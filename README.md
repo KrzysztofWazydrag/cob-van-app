@@ -57,7 +57,7 @@ Remote push notifications and background driver location require an Expo develop
 
 Without configuration the app displays a setup message. There is no authentication bypass or hardcoded credential.
 
-If email confirmation is enabled, signup shows a message to confirm the email and then return to sign in with a password. Configure an appropriate reachable Site URL in Supabase Auth URL Configuration for the confirmation landing page. This foundation does not exchange callback URLs for sessions or implement magic links. Alternatively, confirmation may be disabled in a development project for immediate signup sessions.
+If email confirmation is enabled, signup requests the mobile redirect `cobvan://auth/callback` and tells the user to return to Cob Van to sign in. Add that exact URI under **Authentication → URL Configuration → Redirect URLs** in Supabase so GoTrue does not fall back to the project Site URL. The Expo config registers the `cobvan` scheme for development and production builds. Expo Go does not reliably own custom application schemes, so confirmation still succeeds in the browser but the user may need to return to Expo Go manually. This foundation intentionally does not exchange callback tokens or implement magic-link login.
 
 ### Session behavior
 
@@ -87,7 +87,7 @@ npx expo-doctor
 
 Automated tests cover auth gating, restoration, invalidation events, logout and failure handling, signup confirmation and metadata, and the App's customer/driver routing with stubbed screens. A real Supabase client is tested with a simulated HTTP server response and AsyncStorage adapter for persistence across client recreation, expired-token refresh and logout clearing. The migration is executed in PGlite (embedded PostgreSQL) with a minimal Supabase auth schema to check profile creation/backfill, forced customer role, own-profile RLS, field restrictions, anonymous denial and auth-user deletion.
 
-Validation on 2026-09-09: all 10 tests, TypeScript, web export and iOS/Android bundle exports passed. Expo Doctor passed 20/21 checks; its only failure is the pre-existing Expo patch mismatch (`57.0.20` installed, `~57.0.21` expected). That unrelated upgrade is deferred.
+Validation on 2026-09-09: all 11 tests, TypeScript, web export and iOS/Android bundle exports passed. Expo Doctor passed 20/21 checks; its only failure is the pre-existing Expo patch mismatch (`57.0.20` installed, `~57.0.21` expected). That unrelated upgrade is deferred.
 
 Live Supabase verification on 2026-09-09 passed in the configured web build:
 

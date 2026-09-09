@@ -12,6 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Feather from '@expo/vector-icons/Feather';
 import type { User } from '@supabase/supabase-js';
 import cobSelection from '../../assets/cob-selection.png';
+import type { CurrentProfile } from '../auth/useCurrentProfile';
 import { BuildYourOwnModal } from '../components/BuildYourOwnModal';
 import { FoodImage } from '../components/FoodImage';
 import { InVanStockView } from '../components/InVanStockView';
@@ -22,12 +23,15 @@ import { colors, radius, shadow, spacing, type } from '../theme';
 
 type CustomerScreenProps = {
   buildPricing: BuildYourOwnPricing;
+  displayName: string;
   inventory: Inventory;
   onOpenDriverPreview: () => void;
   onReserve: (product: Product, quantity: number, options: string) => void;
   onSignOut: () => Promise<void>;
   orders: Order[];
   products: Product[];
+  profile: CurrentProfile;
+  profileError: string | null;
   signOutError: string | null;
   signingOut: boolean;
   stopMode: boolean;
@@ -50,7 +54,7 @@ const statusLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function CustomerScreen({ buildPricing, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, signOutError, signingOut, stopMode, user }: CustomerScreenProps) {
+export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, stopMode, user }: CustomerScreenProps) {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Product | null>(null);
   const [sauce, setSauce] = useState(sauces[0]);
@@ -83,7 +87,7 @@ export function CustomerScreen({ buildPricing, inventory, onOpenDriverPreview, o
 
   const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
   const visibleProducts = products.filter((product) => product.available && product.category === category);
-  const customerOrders = orders.filter((order) => order.customer === 'Jamie P.');
+  const customerOrders = orders.filter((order) => order.id === '1' || order.customer === displayName);
 
   const renderProductCard = (product: Product) => {
     const available = reservableCount(inventory[product.id]);
@@ -133,7 +137,7 @@ export function CustomerScreen({ buildPricing, inventory, onOpenDriverPreview, o
         {tab === 'home' ? <View style={styles.topBar}>
           <View>
             <Text style={styles.eyebrow}>MONDAY · ACERO</Text>
-            <Text style={styles.greeting}>Morning, Jamie</Text>
+            <Text style={styles.greeting}>Morning, {displayName}</Text>
           </View>
         </View> : null}
 
@@ -266,6 +270,8 @@ export function CustomerScreen({ buildPricing, inventory, onOpenDriverPreview, o
           <ProfileScreen
             onOpenDriverPreview={onOpenDriverPreview}
             onSignOut={onSignOut}
+            profile={profile}
+            profileError={profileError}
             signOutError={signOutError}
             signingOut={signingOut}
             user={user}
