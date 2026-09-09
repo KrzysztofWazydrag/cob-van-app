@@ -1,4 +1,5 @@
 import { useMemo, useReducer, useState } from 'react';
+import { AuthGate } from './src/auth/AuthGate';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -100,6 +101,16 @@ function stockReducer(state: StockState, action: StockAction): StockState {
 }
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AuthGate>
+        <CobVanPrototype />
+      </AuthGate>
+    </SafeAreaProvider>
+  );
+}
+
+function CobVanPrototype() {
   const [role, setRole] = useState<Role>('customer');
   const [{ inventory, walkUpSales }, dispatchStock] = useReducer(stockReducer, {
     inventory: initialInventory,
@@ -201,41 +212,39 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.app}>
-        <StatusBar style={role === 'driver' ? 'light' : 'dark'} />
-        {role === 'customer' ? (
-          <CustomerScreen
-            buildPricing={buildPricing}
-            favouriteIds={favouriteIds}
-            inventory={inventory}
-            onReserve={reserveProduct}
-            onRolePress={() => setRole('driver')}
-            onToggleFavourite={toggleFavourite}
-            orders={orders}
-            products={pricedProducts}
-            stopMode={stopMode}
-          />
-        ) : (
-          <DriverScreen
-            buildPricing={buildPricing}
-            currentWorkplace={currentWorkplace}
-            inventory={inventory}
-            onAdvanceOrder={advanceOrder}
-            onRolePress={() => setRole('customer')}
-            onSaveBuildPricing={setBuildPricing}
-            onSaveProduct={saveProductMenuSettings}
-            onToggleStopMode={toggleStopMode}
-            onUndoWalkUpSale={undoWalkUpSale}
-            onWalkUpSale={recordWalkUpSale}
-            orders={orders}
-            products={pricedProducts}
-            stopMode={stopMode}
-            walkUpSales={walkUpSales}
-          />
-        )}
-      </View>
-    </SafeAreaProvider>
+    <View style={styles.app}>
+      <StatusBar style={role === 'driver' ? 'light' : 'dark'} />
+      {role === 'customer' ? (
+        <CustomerScreen
+          buildPricing={buildPricing}
+          favouriteIds={favouriteIds}
+          inventory={inventory}
+          onReserve={reserveProduct}
+          onRolePress={() => setRole('driver')}
+          onToggleFavourite={toggleFavourite}
+          orders={orders}
+          products={pricedProducts}
+          stopMode={stopMode}
+        />
+      ) : (
+        <DriverScreen
+          buildPricing={buildPricing}
+          currentWorkplace={currentWorkplace}
+          inventory={inventory}
+          onAdvanceOrder={advanceOrder}
+          onRolePress={() => setRole('customer')}
+          onSaveBuildPricing={setBuildPricing}
+          onSaveProduct={saveProductMenuSettings}
+          onToggleStopMode={toggleStopMode}
+          onUndoWalkUpSale={undoWalkUpSale}
+          onWalkUpSale={recordWalkUpSale}
+          orders={orders}
+          products={pricedProducts}
+          stopMode={stopMode}
+          walkUpSales={walkUpSales}
+        />
+      )}
+    </View>
   );
 }
 
