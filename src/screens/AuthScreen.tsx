@@ -1,15 +1,29 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import authHero from '../../assets/auth-hero.png';
 import { colors, radius, shadow, spacing, type } from '../theme';
+
+type AuthField = 'displayName' | 'email' | 'password';
 
 export function AuthScreen({ client }: { client: SupabaseClient }) {
   const [signUp, setSignUp] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [focusedField, setFocusedField] = useState<AuthField | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,20 +69,116 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar style="dark" />
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen}>
+      <StatusBar style="light" />
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text accessibilityRole="header" style={styles.brand}>Cob Van</Text>
-          <Text style={styles.title}>{signUp ? 'Create your account' : 'Welcome back'}</Text>
-          <Text style={styles.description}>{signUp ? 'Sign up to start using Cob Van.' : 'Sign in to continue.'}</Text>
-          {signUp ? <View style={styles.field}><Text style={styles.label}>Display name</Text><TextInput accessibilityLabel="Display name" autoComplete="name" editable={!busy} maxLength={100} onChangeText={setDisplayName} placeholder="Your name" style={styles.input} value={displayName} /></View> : null}
-          <View style={styles.field}><Text style={styles.label}>Email</Text><TextInput accessibilityLabel="Email" autoCapitalize="none" autoComplete="email" autoCorrect={false} editable={!busy} keyboardType="email-address" onChangeText={setEmail} placeholder="you@example.com" style={styles.input} value={email} /></View>
-          <View style={styles.field}><Text style={styles.label}>Password</Text><TextInput accessibilityLabel="Password" autoCapitalize="none" autoComplete={signUp ? 'new-password' : 'current-password'} autoCorrect={false} editable={!busy} onChangeText={setPassword} onSubmitEditing={submit} placeholder="Password" returnKeyType="go" secureTextEntry style={styles.input} value={password} /></View>
-          {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-          {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={submit} style={({ pressed }) => [styles.primary, (busy || pressed) && styles.pressed]}><Text style={styles.primaryText}>{busy ? 'Please wait…' : signUp ? 'Create account' : 'Sign in'}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={toggleMode} style={styles.secondary}><Text style={styles.secondaryText}>{signUp ? 'Already have an account? Sign in' : 'New to Cob Van? Sign up'}</Text></Pressable>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ImageBackground source={authHero} resizeMode="cover" style={styles.hero} imageStyle={styles.heroImage}>
+            <View style={styles.heroShade} />
+            <View style={styles.brandBlock}>
+              <Text accessibilityRole="header" style={styles.brand}>
+                <Text style={styles.brandCream}>Cob </Text>
+                <Text style={styles.brandYellow}>Van</Text>
+              </Text>
+              <Text style={styles.tagline}>GOOD FOOD{`\n`}ON THE MOVE</Text>
+              <View style={styles.brandRule} />
+            </View>
+          </ImageBackground>
+
+          <View style={styles.panel}>
+            <Text accessibilityRole="header" style={styles.title}>{signUp ? 'Create your account' : 'Welcome back'}</Text>
+            <Text style={styles.description}>
+              {signUp ? 'Join Cob Van and order ahead.' : 'Your next cob is just around the corner.'}
+            </Text>
+
+            {signUp ? (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Display name</Text>
+                <View style={[styles.inputShell, focusedField === 'displayName' && styles.inputShellFocused]}>
+                  <Text style={styles.inputIcon}>●</Text>
+                  <TextInput
+                    accessibilityLabel="Display name"
+                    autoComplete="name"
+                    editable={!busy}
+                    maxLength={100}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setDisplayName}
+                    onFocus={() => setFocusedField('displayName')}
+                    placeholder="How should we greet you?"
+                    placeholderTextColor={colors.muted}
+                    style={styles.input}
+                    value={displayName}
+                  />
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Email</Text>
+              <View style={[styles.inputShell, focusedField === 'email' && styles.inputShellFocused]}>
+                <Text style={styles.inputIcon}>✉</Text>
+                <TextInput
+                  accessibilityLabel="Email"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoCorrect={false}
+                  editable={!busy}
+                  keyboardType="email-address"
+                  onBlur={() => setFocusedField(null)}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  placeholder="your@email.com"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  value={email}
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={[styles.inputShell, focusedField === 'password' && styles.inputShellFocused]}>
+                <Text style={styles.inputIcon}>◆</Text>
+                <TextInput
+                  accessibilityLabel="Password"
+                  autoCapitalize="none"
+                  autoComplete={signUp ? 'new-password' : 'current-password'}
+                  autoCorrect={false}
+                  editable={!busy}
+                  onBlur={() => setFocusedField(null)}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onSubmitEditing={submit}
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="go"
+                  secureTextEntry
+                  style={styles.input}
+                  value={password}
+                />
+              </View>
+            </View>
+
+            {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+            {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy, busy }}
+              disabled={busy}
+              onPress={submit}
+              style={({ pressed }) => [styles.primary, (busy || pressed) && styles.primaryPressed]}
+            >
+              <Text style={styles.primaryText}>{busy ? 'Please wait…' : signUp ? 'Create account  →' : 'Sign in  →'}</Text>
+            </Pressable>
+
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={toggleMode} style={styles.secondary}>
+              <Text style={styles.switchText}>
+                {signUp ? 'Already have an account? ' : 'New to Cob Van? '}
+                <Text style={styles.switchAction}>{signUp ? 'Sign in' : 'Sign up'}</Text>
+              </Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -77,18 +187,31 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
 
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.cream, flex: 1 },
-  content: { flexGrow: 1, justifyContent: 'center', marginHorizontal: 'auto', maxWidth: 480, padding: spacing.xxl, width: '100%' },
-  brand: { color: colors.ink, fontSize: type.hero, fontWeight: '900', marginBottom: spacing.xxl },
-  title: { color: colors.ink, fontSize: type.hero, fontWeight: '900' },
-  description: { color: colors.muted, fontSize: type.body, marginBottom: spacing.xl, marginTop: spacing.sm },
-  field: { marginBottom: spacing.lg },
-  label: { color: colors.ink, fontSize: type.label, fontWeight: '800', marginBottom: spacing.sm },
-  input: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, color: colors.ink, fontSize: type.body, minHeight: 56, paddingHorizontal: spacing.lg },
-  error: { color: colors.red, marginBottom: spacing.md },
-  message: { color: colors.green, lineHeight: type.title, marginBottom: spacing.md },
-  primary: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: 56, ...shadow },
-  primaryText: { color: colors.ink, fontSize: type.body, fontWeight: '900' },
-  pressed: { opacity: 0.72 },
-  secondary: { alignItems: 'center', minHeight: 48, paddingTop: spacing.lg },
-  secondaryText: { color: colors.ink, fontSize: type.label, fontWeight: '800' },
+  scrollContent: { backgroundColor: colors.cream, flexGrow: 1 },
+  hero: { height: spacing.xxxl * 9, justifyContent: 'flex-start', overflow: 'hidden' },
+  heroImage: { borderBottomLeftRadius: radius.lg * 2, borderBottomRightRadius: radius.lg * 2 },
+  heroShade: { backgroundColor: 'rgba(13,27,42,0.18)', bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
+  brandBlock: { marginHorizontal: spacing.xxl, marginTop: spacing.xxxl + spacing.xl },
+  brand: { fontSize: type.hero + spacing.sm, fontWeight: '900', letterSpacing: -1.5 },
+  brandCream: { color: colors.cream },
+  brandYellow: { color: colors.mustard },
+  tagline: { color: colors.paper, fontSize: type.tiny, fontWeight: '900', letterSpacing: 3, lineHeight: type.body + spacing.xs, marginTop: spacing.sm },
+  brandRule: { backgroundColor: colors.mustard, borderRadius: radius.pill, height: spacing.xs, marginTop: spacing.md, width: spacing.xxxl + spacing.xl },
+  panel: { alignSelf: 'center', backgroundColor: colors.cream, flex: 1, marginTop: -spacing.xxl, maxWidth: 520, paddingBottom: spacing.xxl, paddingHorizontal: spacing.xxl, paddingTop: spacing.xxxl + spacing.xl, width: '100%' },
+  title: { color: colors.ink, fontSize: type.hero + spacing.sm, fontWeight: '900', letterSpacing: -1 },
+  description: { color: colors.muted, fontSize: type.body, lineHeight: type.title + spacing.xs, marginBottom: spacing.xl, marginTop: spacing.sm },
+  fieldGroup: { marginBottom: spacing.lg },
+  label: { color: colors.ink, fontSize: type.body, fontWeight: '800', marginBottom: spacing.sm },
+  inputShell: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: radius.md, borderWidth: 1, flexDirection: 'row', minHeight: spacing.xxxl + spacing.xxl, paddingHorizontal: spacing.lg, ...shadow },
+  inputShellFocused: { borderColor: colors.mustardDark, borderWidth: 2 },
+  inputIcon: { color: colors.muted, fontSize: type.title, marginRight: spacing.md, width: spacing.xl },
+  input: { color: colors.ink, flex: 1, fontSize: type.body, minHeight: spacing.xxxl + spacing.xxl, paddingVertical: spacing.md },
+  error: { color: colors.red, fontSize: type.label, marginBottom: spacing.md },
+  message: { color: colors.green, fontSize: type.label, lineHeight: type.title, marginBottom: spacing.md },
+  primary: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: spacing.xxxl + spacing.xxl, paddingHorizontal: spacing.xl, ...shadow },
+  primaryPressed: { opacity: 0.72 },
+  primaryText: { color: colors.ink, fontSize: type.title, fontWeight: '900' },
+  secondary: { alignItems: 'center', justifyContent: 'center', minHeight: spacing.xxxl + spacing.xl, paddingHorizontal: spacing.sm, paddingTop: spacing.md },
+  switchText: { color: colors.ink, fontSize: type.body, fontWeight: '800', textAlign: 'center' },
+  switchAction: { color: colors.orange, fontWeight: '900' },
 });

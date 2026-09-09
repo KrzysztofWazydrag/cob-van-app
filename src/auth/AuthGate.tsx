@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { AuthScreen } from '../screens/AuthScreen';
-import { colors, radius, spacing, type } from '../theme';
+import { colors, radius, shadow, spacing, type } from '../theme';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -21,6 +21,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     let receivedAuthEvent = false;
     setLoading(true);
     setError(null);
+
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
       receivedAuthEvent = true;
@@ -28,6 +29,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setLoading(false);
       setError(null);
     });
+
+    // Supabase restores storage and refreshes expired tokens; no separate session cache.
     client.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active || receivedAuthEvent) return;
       if (sessionError) setError(sessionError.message);
@@ -38,12 +41,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setError('Unable to restore your session. Please try again.');
       setLoading(false);
     });
+
     const refreshForState = (state: string) => {
       if (state === 'active') client.auth.startAutoRefresh();
       else client.auth.stopAutoRefresh();
     };
-    const appStateSubscription = Platform.OS !== 'web' ? AppState.addEventListener('change', refreshForState) : null;
+    const appStateSubscription = Platform.OS !== 'web'
+      ? AppState.addEventListener('change', refreshForState)
+      : null;
     if (Platform.OS !== 'web') refreshForState(AppState.currentState);
+
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -66,21 +73,52 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }
 
-  if (!supabase) return <SafeAreaView style={styles.center}><StatusBar style="dark" /><Text style={styles.title}>Cob Van</Text><Text style={styles.message}>Authentication is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env, then restart Expo.</Text></SafeAreaView>;
-  if (loading) return <SafeAreaView style={styles.center}><StatusBar style="dark" /><ActivityIndicator color={colors.ink} /><Text style={styles.message}>Restoring your session…</Text></SafeAreaView>;
-  if (!session && error) return <SafeAreaView style={styles.center}><StatusBar style="dark" /><Text accessibilityRole="alert" style={styles.message}>{error}</Text><Pressable accessibilityRole="button" style={styles.button} onPress={() => setAttempt((value) => value + 1)}><Text style={styles.buttonText}>Try again</Text></Pressable></SafeAreaView>;
+  if (!supabase) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <StatusBar style="dark" />
+        <Text style={styles.title}>Cob Van</Text>
+        <Text style={styles.message}>Authentication is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env, then restart Expo.</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading) {
+    return <SafeAreaView style={styles.center}><StatusBar style="dark" /><ActivityIndicator color={colors.ink} /><Text style={styles.message}>Restoring your session…</Text></SafeAreaView>;
+  }
+
+  if (!session && error) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <StatusBar style="dark" />
+        <Text accessibilityRole="alert" style={styles.message}>{error}</Text>
+        <Pressable accessibilityRole="button" style={styles.button} onPress={() => setAttempt((value) => value + 1)}><Text style={styles.buttonText}>Try again</Text></Pressable>
+      </SafeAreaView>
+    );
+  }
+
   if (!session) return <AuthScreen client={supabase} />;
 
-  return <View key={session.user.id} style={styles.app}><View style={styles.app}>{children}</View><SafeAreaView edges={['bottom']} style={styles.footer}>{error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}<Pressable accessibilityRole="button" accessibilityState={{ disabled: signingOut, busy: signingOut }} disabled={signingOut} onPress={signOut} style={styles.button}><Text style={styles.buttonText}>{signingOut ? 'Logging out…' : 'Log out'}</Text></Pressable></SafeAreaView></View>;
+  return (
+    <View key={session.user.id} style={styles.app}>
+      <View style={styles.app}>{children}</View>
+      {error ? <Text accessibilityRole="alert" style={styles.errorBanner}>{error}</Text> : null}
+      <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.account}>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: signingOut, busy: signingOut }} disabled={signingOut} onPress={signOut} style={styles.button}>
+          <Text style={styles.buttonText}>{signingOut ? 'Logging out…' : 'Log out'}</Text>
+        </Pressable>
+      </SafeAreaView>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   app: { flex: 1 },
-  center: { alignItems: 'center', backgroundColor: colors.cream, flex: 1, gap: spacing.lg, justifyContent: 'center', padding: spacing.xxl },
-  title: { color: colors.ink, fontSize: type.hero, fontWeight: '900' },
-  message: { color: colors.ink, fontSize: type.body, textAlign: 'center' },
-  footer: { alignItems: 'center', backgroundColor: colors.cream, gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  button: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.xl },
-  buttonText: { color: colors.ink, fontSize: type.label, fontWeight: '800' },
-  error: { color: colors.red, textAlign: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16, backgroundColor: colors.cream },
+  title: { fontSize: 32, fontWeight: '900', color: colors.ink },
+  message: { color: colors.ink, textAlign: 'center', fontSize: 16 },
+  account: { position: 'absolute', right: spacing.xxxl + spacing.xxl + spacing.sm, top: 0 },
+  button: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.pill, justifyContent: 'center', minHeight: spacing.xxxl, paddingHorizontal: spacing.md, ...shadow },
+  buttonText: { color: colors.ink, fontSize: type.tiny, fontWeight: '800' },
+  errorBanner: { backgroundColor: colors.paper, borderRadius: radius.sm, bottom: spacing.lg, color: colors.red, left: spacing.lg, padding: spacing.md, position: 'absolute', right: spacing.lg, textAlign: 'center', zIndex: 2, ...shadow },
 });
