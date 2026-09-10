@@ -16,9 +16,11 @@ vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView',
 vi.mock('@expo/vector-icons/Feather', () => ({ default: 'Feather' }));
 vi.mock('../src/components/FoodImage', () => ({ FoodImage: () => React.createElement('FoodImage') }));
 vi.mock('../src/components/BuildYourOwnModal', () => ({ BuildYourOwnModal: ({ visible }: { visible: boolean }) => visible ? React.createElement('Text', {}, 'Build your own open') : null }));
-vi.mock('../src/components/VanTrackingModal', () => ({ VanTrackingModal: ({ visible }: { visible: boolean }) => visible ? React.createElement('Text', {}, 'Tracking open') : null }));
 
 import { initialBuildYourOwnPricing, initialInventory, orders, products } from '../src/data';
+vi.mock('../src/components/VanMap', async () => import('../src/components/VanMap.web'));
+
+import { VanTrackingModal } from '../src/components/VanTrackingModal';
 import { CustomerScreen } from '../src/screens/CustomerScreen';
 
 test('customer navigation and reservation work without unsupported cutoff or expiry claims', async () => {
@@ -98,10 +100,13 @@ test('customer navigation and reservation work without unsupported cutoff or exp
   expect(mocks.onReserve).toHaveBeenCalledWith(product, 2, 'Red sauce');
   expect(renderedText()).toContain('Your food is reserved');
   expectNoDeadlineClaims();
-  const trackingButton = tree.root.findAllByType('Pressable' as never).find((node) => String(node.props.accessibilityLabel).startsWith('On the way'));
+  const trackingButton = tree.root.findAllByType('Pressable' as never).find((node) => node.props.accessibilityLabel === 'Open tracking demo');
   expect(trackingButton).toBeDefined();
   await act(async () => trackingButton?.props.onPress());
-  expect(renderedText()).toContain('Tracking open');
+  expect(tree.root.findByType(VanTrackingModal).props.visible).toBe(true);
+  expect(renderedText()).toContain('TRACKING DEMO');
+  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Close van tracking' }).props.onPress());
+  expect(tree.root.findByType(VanTrackingModal).props.visible).toBe(false);
 
   await act(async () => tree.unmount());
 });

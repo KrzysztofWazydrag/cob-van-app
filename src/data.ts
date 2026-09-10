@@ -103,15 +103,15 @@ export const initialInventory: Inventory = {
   'build-your-own': { physical: 10, reserved: 0, walkUpBuffer: 2 },
   'bacon-egg': { physical: 8, reserved: 1, walkUpBuffer: 3 },
   'sausage-egg': { physical: 12, reserved: 2, walkUpBuffer: 2 },
-  'bacon-cheese-tomato': { physical: 7, reserved: 1, walkUpBuffer: 2 },
+  'bacon-cheese-tomato': { physical: 7, reserved: 0, walkUpBuffer: 2 },
   'coronation-chicken': { physical: 5, reserved: 0, walkUpBuffer: 1 },
   'ham-cheese-toastie': { physical: 6, reserved: 0, walkUpBuffer: 0 },
   'tuna-mayo': { physical: 5, reserved: 0, walkUpBuffer: 1 },
-  'egg-mayo': { physical: 6, reserved: 1, walkUpBuffer: 1 },
-  'breakfast-wrap': { physical: 7, reserved: 2, walkUpBuffer: 2 },
-  'veggie-wrap': { physical: 5, reserved: 1, walkUpBuffer: 1 },
-  'small-english': { physical: 5, reserved: 2, walkUpBuffer: 1 },
-  'full-english': { physical: 4, reserved: 1, walkUpBuffer: 1 },
+  'egg-mayo': { physical: 6, reserved: 0, walkUpBuffer: 1 },
+  'breakfast-wrap': { physical: 7, reserved: 1, walkUpBuffer: 2 },
+  'veggie-wrap': { physical: 5, reserved: 0, walkUpBuffer: 1 },
+  'small-english': { physical: 5, reserved: 0, walkUpBuffer: 1 },
+  'full-english': { physical: 4, reserved: 0, walkUpBuffer: 1 },
 };
 
 export function reservableCount(stock: StockLevel) {

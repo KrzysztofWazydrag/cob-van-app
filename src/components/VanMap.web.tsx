@@ -25,7 +25,7 @@ export function VanMap({ coordinate }: VanMapProps) {
       <View style={styles.route} />
       <View style={[styles.vanMarker, { left: progress }]}><Text style={styles.vanText}>🚐</Text></View>
       <View style={styles.stopMarker}><Text style={styles.stopText}>A</Text></View>
-      <Text style={styles.mapLabel}>Live map preview</Text>
+      <Text style={styles.mapLabel}>Simulated map preview</Text>
     </View>
   );
 }

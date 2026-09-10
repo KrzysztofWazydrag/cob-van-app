@@ -25,14 +25,14 @@ export function VanTrackingModal({ onClose, visible }: VanTrackingModalProps) {
     return () => clearInterval(timer);
   }, [visible]);
 
-  const arrived = routeIndex === vanRoute.length - 1;
+  const simulationComplete = routeIndex === vanRoute.length - 1;
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
       <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>{arrived ? 'ARRIVED' : 'LIVE · 2 STOPS AWAY'}</Text>
+            <Text style={styles.eyebrow}>TRACKING DEMO</Text>
             <Text style={styles.title}>The Cob Van</Text>
           </View>
           <Pressable accessibilityLabel="Close van tracking" onPress={onClose} style={styles.closeButton}>
@@ -43,12 +43,12 @@ export function VanTrackingModal({ onClose, visible }: VanTrackingModalProps) {
           <VanMap coordinate={vanRoute[routeIndex]} />
         </View>
         <View style={styles.arrivalCard}>
-          <View style={styles.arrivalIcon}><Text style={styles.arrivalIconText}>{arrived ? '✓' : '🚐'}</Text></View>
+          <View style={styles.arrivalIcon}><Text style={styles.arrivalIconText}>{simulationComplete ? '✓' : '🚐'}</Text></View>
           <View style={styles.arrivalCopy}>
-            <Text style={styles.arrivalLabel}>{arrived ? 'The van is at Acero' : 'Arriving at Acero'}</Text>
-            <Text style={styles.arrivalTime}>{arrived ? 'Collect your order now' : `${Math.max(1, 4 - routeIndex)} minutes`}</Text>
+            <Text style={styles.arrivalLabel}>{simulationComplete ? 'Simulation complete' : 'Simulated movement'}</Text>
+            <Text style={styles.arrivalTime}>Demo route only</Text>
           </View>
-          <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
+          <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>DEMO</Text></View>
         </View>
       </SafeAreaView>
     </Modal>

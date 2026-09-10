@@ -54,7 +54,7 @@ const statusLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, stopMode, user }: CustomerScreenProps) {
+export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, user }: CustomerScreenProps) {
   const workplaceName = profile.workplaceName || 'Your workplace';
   const weekday = new Date().toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
   const insets = useSafeAreaInsets();
@@ -166,24 +166,24 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
           <View style={styles.heroShade} />
           <View style={styles.heroTopRow}>
             <Pressable
-              accessibilityLabel={`${stopMode ? `At ${workplaceName} now` : 'On the way'}. Track the van on the map`}
+              accessibilityLabel="Open tracking demo"
               accessibilityRole="button"
               onPress={() => setTracking(true)}
               style={({ pressed }) => [styles.livePill, pressed && styles.heroControlPressed]}
             >
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>{stopMode ? `AT ${workplaceName.toUpperCase()} NOW` : 'ON THE WAY'}</Text>
+              <Text style={styles.liveText}>TRACKING DEMO</Text>
               <Text style={styles.liveLinkIcon}>↗</Text>
             </Pressable>
           </View>
           <View style={styles.heroCopy}>
             <Text style={styles.heroTitle}>The Cob Van</Text>
             <View style={styles.etaRow}>
-              <Text style={styles.etaTime}>{stopMode ? 'NOW' : '10:15'}</Text>
+              <Text style={styles.etaTime}>DEMO</Text>
               <View style={styles.etaDivider} />
               <View>
-                <Text style={styles.etaLabel}>{stopMode ? 'STOP MODE' : 'ARRIVING IN'}</Text>
-                <Text style={styles.etaMinutes}>{stopMode ? 'Order before it goes' : '12 minutes'}</Text>
+                <Text style={styles.etaLabel}>MAP PREVIEW</Text>
+                <Text style={styles.etaMinutes}>Simulated route</Text>
               </View>
             </View>
           </View>

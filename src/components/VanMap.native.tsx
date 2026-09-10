@@ -40,6 +40,11 @@ function createMapHtml(initialCoordinate: VanCoordinate) {
   </head>
   <body>
     <div id="map"></div>
+    <script>
+      window.addEventListener('error', function() {
+        window.ReactNativeWebView.postMessage('map-error');
+      }, true);
+    </script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       const route = ${route};
@@ -52,8 +57,8 @@ function createMapHtml(initialCoordinate: VanCoordinate) {
 
       const stopIcon = L.divIcon({ className: '', html: '<div class="stop-pin">A</div>', iconAnchor: [21, 21], iconSize: [42, 42] });
       const vanIcon = L.divIcon({ className: '', html: '<div class="van-pin">🚐</div>', iconAnchor: [25, 25], iconSize: [50, 50] });
-      L.marker([${destination.latitude}, ${destination.longitude}], { icon: stopIcon }).addTo(map).bindTooltip('Acero');
-      const vanMarker = L.marker([${initialCoordinate.latitude}, ${initialCoordinate.longitude}], { icon: vanIcon }).addTo(map).bindTooltip('The Cob Van');
+      L.marker([${destination.latitude}, ${destination.longitude}], { icon: stopIcon }).addTo(map).bindTooltip('Demo stop');
+      const vanMarker = L.marker([${initialCoordinate.latitude}, ${initialCoordinate.longitude}], { icon: vanIcon }).addTo(map).bindTooltip('Simulated van');
 
       window.setVanCoordinate = function(latitude, longitude) {
         vanMarker.setLatLng([latitude, longitude]);
@@ -62,6 +67,10 @@ function createMapHtml(initialCoordinate: VanCoordinate) {
       tiles.once('load', function() {
         window.ReactNativeWebView.postMessage('tiles-ready');
       });
+      tiles.on('tileerror', function() {
+        window.ReactNativeWebView.postMessage('map-error');
+      });
+      window.ReactNativeWebView.postMessage('map-ready');
       window.setTimeout(function() { map.invalidateSize(); }, 100);
     </script>
   </body>
@@ -70,33 +79,56 @@ function createMapHtml(initialCoordinate: VanCoordinate) {
 
 export function VanMap({ coordinate }: VanMapProps) {
   const mapRef = useRef<WebView>(null);
-  const [tilesReady, setTilesReady] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const source = useMemo(() => ({ html: createMapHtml(coordinate) }), []);
 
   useEffect(() => {
+    if (!mapReady || status === 'error') return;
     mapRef.current?.injectJavaScript(
       `window.setVanCoordinate && window.setVanCoordinate(${coordinate.latitude}, ${coordinate.longitude}); true;`,
     );
-  }, [coordinate]);
+  }, [coordinate, mapReady, status]);
+
+  useEffect(() => {
+    if (status !== 'loading') return;
+    const timeout = setTimeout(() => {
+      setMapReady(false);
+      setStatus('error');
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [status]);
+
+  const failMap = () => {
+    setMapReady(false);
+    setStatus('error');
+  };
 
   const handleMessage = (event: WebViewMessageEvent) => {
-    if (event.nativeEvent.data === 'tiles-ready') setTilesReady(true);
+    if (status === 'error') return;
+    if (event.nativeEvent.data === 'map-ready') setMapReady(true);
+    if (event.nativeEvent.data === 'tiles-ready') setStatus((current) => current === 'error' ? current : 'ready');
+    if (event.nativeEvent.data === 'map-error') failMap();
   };
 
   return (
     <View style={styles.map}>
       <WebView
         javaScriptEnabled
+        onError={failMap}
+        onHttpError={failMap}
         onMessage={handleMessage}
         originWhitelist={['*']}
         ref={mapRef}
         source={source}
         style={styles.webView}
       />
-      {!tilesReady ? (
-        <View pointerEvents="none" style={styles.loading}>
-          <ActivityIndicator color={colors.orange} size="large" />
-          <Text style={styles.loadingText}>Loading map…</Text>
+      {status !== 'ready' ? (
+        <View style={styles.loading}>
+          {status === 'loading' ? <ActivityIndicator color={colors.orange} size="large" /> : null}
+          <Text accessibilityRole={status === 'error' ? 'alert' : undefined} style={styles.loadingText}>
+            {status === 'error' ? 'Demo map unavailable. Close and reopen tracking to try again.' : 'Loading map…'}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -107,5 +139,5 @@ const styles = StyleSheet.create({
   map: { backgroundColor: colors.cream, flex: 1 },
   webView: { backgroundColor: colors.cream, flex: 1 },
   loading: { alignItems: 'center', backgroundColor: colors.cream, bottom: 0, justifyContent: 'center', left: 0, position: 'absolute', right: 0, top: 0 },
-  loadingText: { color: colors.muted, fontSize: type.label, fontWeight: '700', marginTop: spacing.md },
+  loadingText: { color: colors.muted, fontSize: type.label, fontWeight: '700', marginTop: spacing.md, paddingHorizontal: spacing.lg, textAlign: 'center' },
 });
