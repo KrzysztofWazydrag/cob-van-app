@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  BackHandler,
   ImageBackground,
   KeyboardAvoidingView,
   Linking,
@@ -68,14 +69,23 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
     }
   }
 
-  function toggleMode() {
-    setSignUp((current) => !current);
+  const changeMode = useCallback((nextSignUp: boolean) => {
+    setSignUp(nextSignUp);
     setPassword('');
     setShowPassword(false);
     setOwnerContactVisible(false);
     setError(null);
     setMessage(null);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !signUp) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      changeMode(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [signUp, changeMode]);
 
   async function contactOwner() {
     setOwnerContactVisible(true);
@@ -104,6 +114,12 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
           </ImageBackground>
 
           <View style={styles.panel}>
+            {signUp ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Back to sign in" onPress={() => changeMode(false)} style={styles.backButton}>
+                <Feather color={colors.ink} name="arrow-left" size={20} />
+                <Text style={styles.switchText}>Back to sign in</Text>
+              </Pressable>
+            ) : null}
             <Text accessibilityRole="header" style={styles.title}>{signUp ? 'Create your account' : 'Welcome back'}</Text>
             <Text style={styles.description}>
               {signUp ? 'Join Cob Van and order ahead.' : 'Your next cob is just around the corner.'}
@@ -198,7 +214,7 @@ export function AuthScreen({ client }: { client: SupabaseClient }) {
               <Text style={styles.primaryText}>{busy ? 'Please wait…' : signUp ? 'Create account  →' : 'Sign in  →'}</Text>
             </Pressable>
 
-            <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={toggleMode} style={styles.secondary}>
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => changeMode(!signUp)} style={styles.secondary}>
               <Text style={styles.switchText}>
                 {signUp ? 'Already have an account? ' : 'New to Cob Van? '}
                 <Text style={styles.switchAction}>{signUp ? 'Sign in' : 'Sign up'}</Text>
@@ -236,6 +252,7 @@ const styles = StyleSheet.create({
   brandRule: { backgroundColor: colors.mustard, borderRadius: radius.pill, height: spacing.xs, marginTop: spacing.md, width: spacing.xxxl + spacing.xl },
   panel: { alignSelf: 'center', backgroundColor: colors.cream, flex: 1, marginTop: -spacing.xxl, maxWidth: 520, paddingBottom: spacing.xxl, paddingHorizontal: spacing.xxl, paddingTop: spacing.xxxl + spacing.xl, width: '100%' },
   title: { color: colors.ink, fontSize: type.hero + spacing.sm, fontWeight: '900', letterSpacing: -1 },
+  backButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, minHeight: 44, marginBottom: spacing.md },
   description: { color: colors.muted, fontSize: type.body, lineHeight: type.title + spacing.xs, marginBottom: spacing.xl, marginTop: spacing.sm },
   fieldGroup: { marginBottom: spacing.lg },
   label: { color: colors.ink, fontSize: type.body, fontWeight: '800', marginBottom: spacing.sm },

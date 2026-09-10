@@ -3,6 +3,10 @@ import { act, create } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  platform: { OS: 'ios' },
+  backListener: null as null | (() => boolean),
+  removeBackListener: vi.fn(),
+  addBackListener: vi.fn(),
   rpc: vi.fn(),
   profileState: { error: null as string | null, loading: false, reload: vi.fn(), profile: { displayName: 'Kris', role: 'customer', workplaceId: 'workplace-1' as string | null, workplaceName: 'ACERO' as string | null } },
   listener: null as null | ((event: string, session: unknown) => void),
@@ -19,7 +23,8 @@ vi.mock('../src/auth/useCurrentProfile', () => ({ useCurrentProfile: () => mocks
 vi.mock('react-native', () => ({
   Modal: 'Modal', Switch: 'Switch', ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Pressable: 'Pressable', Text: 'Text', View: 'View',
   KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', TextInput: 'TextInput',
-  StyleSheet: { create: (styles: unknown) => styles }, Platform: { OS: 'ios' },
+  StyleSheet: { create: (styles: unknown) => styles }, Platform: mocks.platform,
+  BackHandler: { addEventListener: mocks.addBackListener },
   AppState: { currentState: 'active', addEventListener: (_event: string, fn: typeof mocks.appStateListener) => { mocks.appStateListener = fn; return { remove: mocks.remove }; } },
   Linking: { openURL: mocks.openURL },
 }));
@@ -57,6 +62,13 @@ const fill = async (label: string, value: string) => {
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  mocks.platform.OS = 'ios';
+  mocks.backListener = null;
+  mocks.addBackListener.mockImplementation((_event: string, listener: () => boolean) => {
+    mocks.backListener = listener;
+    return { remove: mocks.removeBackListener };
+  });
+  mocks.removeBackListener.mockImplementation(() => { mocks.backListener = null; });
   vi.stubGlobal('__DEV__', false);
   mocks.profileState.profile.role = 'customer';
   mocks.profileState.profile.displayName = 'Kris';
@@ -458,4 +470,58 @@ test('walk-up sale and undo preserve orders and the local ID sequence', async ()
   const after = tree.root.findByType(CustomerScreen).props;
   expect(after.orders[0].id).not.toBe(firstId);
   expect(after.orders).toHaveLength(before.orders.length + 1);
+});
+
+test('Sign Up has a visible back action that returns to Sign In and retains email', async () => {
+  await act(async () => { tree = create(<AuthScreen client={{ auth: mocks.auth } as any} />); });
+  expect(tree.root.findAllByProps({ accessibilityLabel: 'Back to sign in' })).toHaveLength(0);
+  await press('New to Cob Van');
+  await fill('Email', 'user@example.com');
+  await fill('Password', 'signup-password');
+  const back = tree.root.findByProps({ accessibilityLabel: 'Back to sign in' });
+  expect(back.props.accessibilityRole).toBe('button');
+  await act(async () => back.props.onPress());
+  expect(text()).toContain('Welcome back');
+  expect(text()).not.toContain('Create your account');
+  expect(tree.root.findByProps({ accessibilityLabel: 'Email' }).props.value).toBe('user@example.com');
+  expect(tree.root.findByProps({ accessibilityLabel: 'Password' }).props.value).toBe('');
+  expect(mocks.addBackListener).not.toHaveBeenCalled();
+});
+
+test('Android consumes back on Sign Up and removes its handler on Sign In and unmount', async () => {
+  mocks.platform.OS = 'android';
+  await act(async () => { tree = create(<AuthGate>{authenticatedChild}</AuthGate>); });
+  expect(mocks.addBackListener).not.toHaveBeenCalled();
+  await press('New to Cob Van');
+  expect(mocks.addBackListener).toHaveBeenCalledWith('hardwareBackPress', expect.any(Function));
+  await act(async () => { expect(mocks.backListener?.()).toBe(true); });
+  expect(text()).toContain('Welcome back');
+  expect(text()).not.toContain('Create your account');
+  expect(mocks.removeBackListener).toHaveBeenCalledOnce();
+  expect(mocks.backListener).toBeNull();
+  await press('New to Cob Van');
+  await act(async () => tree.unmount());
+  expect(mocks.removeBackListener).toHaveBeenCalledTimes(2);
+  expect(mocks.backListener).toBeNull();
+});
+
+test('Android back during signup returns to Sign In without cancelling or repeating signup', async () => {
+  mocks.platform.OS = 'android';
+  let completeSignup!: (value: unknown) => void;
+  mocks.auth.signUp.mockImplementationOnce(() => new Promise((resolve) => { completeSignup = resolve; }));
+  await act(async () => { tree = create(<AuthScreen client={{ auth: mocks.auth } as any} />); });
+  await press('New to Cob Van');
+  await fill('Display name', 'Kris');
+  await fill('Email', 'user@example.com');
+  await fill('Password', 'signup-password');
+  let pending!: Promise<void>;
+  await act(async () => { pending = tree.root.findByProps({ accessibilityLabel: 'Password' }).props.onSubmitEditing(); });
+  expect(text()).toContain('Please wait');
+  await act(async () => { expect(mocks.backListener?.()).toBe(true); });
+  expect(text()).toContain('Welcome back');
+  expect(mocks.backListener).toBeNull();
+  await act(async () => { completeSignup({ data: { session: null }, error: null }); await pending; });
+  expect(mocks.auth.signUp).toHaveBeenCalledOnce();
+  expect(text()).toContain('Check your email to confirm your account');
+  expect(text()).toContain('Welcome back');
 });
