@@ -11,6 +11,9 @@ type DriverScreenProps = {
   inventory: Inventory;
   onAdvanceOrder: (orderId: string) => void;
   onRolePress: () => void;
+  onSignOut: () => Promise<void>;
+  signOutError: string | null;
+  signingOut: boolean;
   onSaveBuildPricing: (pricing: BuildYourOwnPricing) => void;
   onSaveProduct: (productId: string, price: number, available: boolean) => void;
   onToggleStopMode: () => void;
@@ -42,7 +45,7 @@ const timeFormatter = new Intl.DateTimeFormat(undefined, {
   second: '2-digit',
 });
 
-export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdvanceOrder, onRolePress, onSaveBuildPricing, onSaveProduct, onToggleStopMode, onUndoWalkUpSale, onWalkUpSale, orders, products, stopMode, walkUpSales }: DriverScreenProps) {
+export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdvanceOrder, onRolePress, onSignOut, signOutError, signingOut, onSaveBuildPricing, onSaveProduct, onToggleStopMode, onUndoWalkUpSale, onWalkUpSale, orders, products, stopMode, walkUpSales }: DriverScreenProps) {
   const [tab, setTab] = useState<'orders' | 'stock'>('orders');
   const [menuPricesOpen, setMenuPricesOpen] = useState(false);
   const readyCount = orders.filter((order) => order.status === 'ready').length;
@@ -66,6 +69,10 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {signOutError ? <Text accessibilityRole="alert" style={styles.signOutError}>{signOutError}</Text> : null}
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: signingOut, busy: signingOut }} disabled={signingOut} onPress={onSignOut} style={styles.logoutButton}>
+          <Text style={styles.navigateText}>{signingOut ? 'Logging out…' : 'Log out'}</Text>
+        </Pressable>
         <View style={styles.stopCard}>
           <View style={styles.stopTop}>
             <View style={styles.stopNumber}><Text style={styles.stopNumberText}>3</Text></View>
@@ -299,6 +306,8 @@ const styles = StyleSheet.create({
   devExitButton: { alignItems: 'center', borderColor: colors.mustard, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 40, paddingHorizontal: spacing.md },
   devExitText: { color: colors.mustard, fontSize: type.tiny, fontWeight: '900', letterSpacing: 0.5 },
   content: { paddingBottom: spacing.xxxl, paddingHorizontal: spacing.lg },
+  signOutError: { color: colors.red, marginTop: spacing.md },
+  logoutButton: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.md, justifyContent: 'center', minHeight: 48, marginTop: spacing.md, marginBottom: spacing.xxl },
   stopCard: { backgroundColor: colors.paper, borderRadius: radius.lg, marginTop: -spacing.lg, padding: spacing.lg, ...shadow },
   stopTop: { alignItems: 'center', flexDirection: 'row' },
   stopNumber: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, height: 48, justifyContent: 'center', width: 48 },

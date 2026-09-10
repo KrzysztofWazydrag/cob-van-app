@@ -21,7 +21,7 @@ vi.mock('../src/components/VanTrackingModal', () => ({ VanTrackingModal: ({ visi
 import { initialBuildYourOwnPricing, initialInventory, orders, products } from '../src/data';
 import { CustomerScreen } from '../src/screens/CustomerScreen';
 
-test('four-tab navigation exposes ready stock, orders and profile without an avatar role switch', async () => {
+test('customer navigation and reservation work without unsupported cutoff or expiry claims', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as any).__DEV__ = true;
   let tree!: ReturnType<typeof create>;
@@ -47,6 +47,9 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
   });
 
   const renderedText = () => JSON.stringify(tree.toJSON());
+  const expectNoDeadlineClaims = () => {
+    expect(renderedText()).not.toMatch(/9:45|minutes left to reserve|held for 10 minutes|reservations? expir/i);
+  };
   const pressText = async (label: string) => {
     const button = tree.root.findAllByType('Pressable' as never).find((node) => node.findAllByType('Text' as never).some((child) => String(child.props.children).includes(label)));
     if (!button) throw new Error(`Missing button: ${label}`);
@@ -58,6 +61,9 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
   expect(renderedText()).toContain('In the van');
   expect(renderedText()).toContain('Orders');
   expect(renderedText()).toContain('Profile');
+  expect(renderedText()).toContain('Reserve from the menu');
+  expect(renderedText()).toContain('Browse available food for');
+  expectNoDeadlineClaims();
   expect(renderedText()).not.toContain('Favourites');
   expect(tree.root.findAllByProps({ accessibilityLabel: 'Switch to van crew view' })).toHaveLength(0);
 
@@ -68,6 +74,8 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
   expect(renderedText()).not.toContain(' in van · ');
   await pressText('Orders');
   expect(renderedText()).toContain('Your orders');
+  expect(renderedText()).toContain('No orders yet');
+  expect(renderedText()).not.toContain('ORDER #');
   await pressText('Profile');
   expect(renderedText()).toContain('Kris');
   expect(renderedText()).toContain('jamie@example.com');
@@ -79,10 +87,67 @@ test('four-tab navigation exposes ready stock, orders and profile without an ava
 
   await pressText('Home');
   expect(renderedText()).toContain('Order ahead');
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await act(async () => tree.root.findByProps({ accessibilityLabel: `Choose ${product.name}, £${product.price.toFixed(2)}` }).props.onPress());
+  expect(renderedText()).toContain('No payment now');
+  expectNoDeadlineClaims();
+  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Increase quantity' }).props.onPress());
+  await pressText('Red sauce');
+  await pressText('Reserve mine');
+  expect(mocks.onReserve).toHaveBeenCalledOnce();
+  expect(mocks.onReserve).toHaveBeenCalledWith(product, 2, 'Red sauce');
+  expect(renderedText()).toContain('Your food is reserved');
+  expectNoDeadlineClaims();
   const trackingButton = tree.root.findAllByType('Pressable' as never).find((node) => String(node.props.accessibilityLabel).startsWith('On the way'));
   expect(trackingButton).toBeDefined();
   await act(async () => trackingButton?.props.onPress());
   expect(renderedText()).toContain('Tracking open');
 
   await act(async () => tree.unmount());
+});
+
+test.each([
+  ['00000000-0000-4000-8000-000000000001', 'Jamie P.', 'First UUID order', 'Second UUID order'],
+  ['00000000-0000-4000-8000-000000000002', 'Jamie P.', 'Second UUID order', 'First UUID order'],
+  ['00000000-0000-4000-8000-000000000001', 'Renamed customer', 'First UUID order', 'Second UUID order'],
+])('order history uses UUID %s regardless of display name %s', async (userId, displayName, ownItem, otherItem) => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('__DEV__', false);
+  const localOrders = [
+    ...orders,
+    { ...orders[0], id: 'local-first', customerId: '00000000-0000-4000-8000-000000000001', itemName: 'First UUID order' },
+    { ...orders[0], id: 'local-second', customerId: '00000000-0000-4000-8000-000000000002', itemName: 'Second UUID order' },
+  ];
+  let tree!: ReturnType<typeof create>;
+  try {
+    await act(async () => {
+      tree = create(<CustomerScreen
+        buildPricing={initialBuildYourOwnPricing}
+        displayName={displayName}
+        inventory={initialInventory}
+        onOpenDriverPreview={mocks.onOpenDriverPreview}
+        onReserve={mocks.onReserve}
+        onSignOut={mocks.onSignOut}
+        orders={localOrders}
+        products={products}
+        profile={{ displayName, role: 'customer', workplaceId: 'workplace-1', workplaceName: 'ACERO' }}
+        profileError={null}
+        signOutError={null}
+        signingOut={false}
+        stopMode={false}
+        user={{ id: userId } as any}
+      />);
+    });
+    const ordersTab = tree.root.findAllByProps({ accessibilityRole: 'tab' }).find((node) =>
+      node.findAllByType('Text' as never).some((child) => child.props.children === 'Orders'))!;
+    await act(async () => ordersTab.props.onPress());
+    const rendered = JSON.stringify(tree.toJSON());
+    expect(rendered).toContain(ownItem);
+    expect(rendered).not.toContain(otherItem);
+    expect(rendered).not.toContain(orders[0].itemName);
+    expect(rendered).not.toContain('No orders yet');
+  } finally {
+    if (tree) await act(async () => tree.unmount());
+    vi.unstubAllGlobals();
+  }
 });

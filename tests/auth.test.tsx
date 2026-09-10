@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/lib/supabase', () => ({ supabase: { auth: mocks.auth, rpc: mocks.rpc } }));
 vi.mock('../src/auth/useCurrentProfile', () => ({ useCurrentProfile: () => mocks.profileState }));
 vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Pressable: 'Pressable', Text: 'Text', View: 'View',
+  Modal: 'Modal', Switch: 'Switch', ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Pressable: 'Pressable', Text: 'Text', View: 'View',
   KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', TextInput: 'TextInput',
   StyleSheet: { create: (styles: unknown) => styles }, Platform: { OS: 'ios' },
   AppState: { currentState: 'active', addEventListener: (_event: string, fn: typeof mocks.appStateListener) => { mocks.appStateListener = fn; return { remove: mocks.remove }; } },
@@ -27,11 +27,13 @@ vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView',
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('@expo/vector-icons/Feather', () => ({ default: 'Feather' }));
 vi.mock('../src/screens/CustomerScreen', () => ({ CustomerScreen: ({ displayName, onOpenDriverPreview }: { displayName: string; onOpenDriverPreview: () => void }) => React.createElement('Pressable', { onPress: onOpenDriverPreview }, React.createElement('Text', {}, 'Customer prototype'), React.createElement('Text', {}, `Morning, ${displayName}`)) }));
-vi.mock('../src/screens/DriverScreen', () => ({ DriverScreen: ({ onRolePress }: { onRolePress: () => void }) => React.createElement('Pressable', { onPress: onRolePress }, React.createElement('Text', {}, 'Driver prototype')) }));
 vi.mock('../src/notifications', () => ({ notifyVanArrived: vi.fn() }));
 import App from '../App';
 import { AuthGate } from '../src/auth/AuthGate';
 import { AuthScreen } from '../src/screens/AuthScreen';
+import { DriverScreen } from '../src/screens/DriverScreen';
+import { CustomerScreen } from '../src/screens/CustomerScreen';
+import { orders as fixtureOrders, products } from '../src/data';
 
 let tree: ReturnType<typeof create>;
 const session = { user: { id: 'customer-1' }, access_token: 'test-token' };
@@ -55,6 +57,9 @@ const fill = async (label: string, value: string) => {
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  vi.stubGlobal('__DEV__', false);
+  mocks.profileState.profile.role = 'customer';
+  mocks.profileState.profile.displayName = 'Kris';
   mocks.profileState.error = null;
   mocks.profileState.loading = false;
   mocks.profileState.profile.workplaceId = 'workplace-1';
@@ -66,7 +71,11 @@ beforeEach(() => {
   });
   mocks.openURL.mockResolvedValue(undefined);
 });
-afterEach(async () => { if (tree) await act(async () => tree.unmount()); });
+afterEach(async () => {
+  if (tree) await act(async () => tree.unmount());
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 test('waits for storage, restores a session, logs out and requires sign in on remount', async () => {
   let restore: (value: unknown) => void = () => {};
@@ -152,7 +161,8 @@ test('sign up supplies display name and handles email confirmation without a ses
 });
 
 
-test('App opens the customer prototype after authentication and preserves the driver switch', async () => {
+test('DEV preview can switch between customer and crew without changing the profile role', async () => {
+  vi.stubGlobal('__DEV__', true);
   await act(async () => { tree = create(<App />); });
   expect(text()).toContain('Welcome back');
   expect(text()).not.toContain('Customer prototype');
@@ -160,8 +170,9 @@ test('App opens the customer prototype after authentication and preserves the dr
   expect(text()).toContain('Customer prototype');
   expect(text()).toContain('Morning, Kris');
   await press('Customer prototype');
-  expect(text()).toContain('Driver prototype');
-  await press('Driver prototype');
+  expect(text()).toContain('Next stop');
+  expect(mocks.profileState.profile.role).toBe('customer');
+  await press('DEV · CUSTOMER');
   expect(text()).toContain('Customer prototype');
 });
 
@@ -210,4 +221,241 @@ test('profile loading and failures block onboarding and customer content with re
   await press('Try again');
   expect(mocks.profileState.reload).toHaveBeenCalledOnce();
   expect(text()).not.toContain('Customer prototype');
+});
+
+
+test.each(['customer', 'owner', 'driver'])('production routes the %s profile and ignores preview callbacks', async (role) => {
+  mocks.profileState.profile.role = role;
+  mocks.profileState.profile.workplaceId = role === 'customer' ? 'workplace-1' : null;
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  await act(async () => { tree = create(<App />); });
+  if (role === 'customer') {
+    expect(text()).toContain('Customer prototype');
+    await press('Customer prototype'); // Invoke even a callback that the production Profile hides.
+    expect(text()).toContain('Customer prototype');
+    expect(text()).not.toContain('Next stop');
+  } else {
+    expect(text()).toContain('Next stop');
+    expect(text()).not.toContain('Customer prototype');
+    expect(text()).not.toContain('Join your workplace');
+    expect(text()).not.toContain('DEV · CUSTOMER');
+    expect(text()).toContain('Log out');
+  }
+});
+
+test('workplace membership and privileged metadata do not grant staff navigation', async () => {
+  mocks.profileState.profile.displayName = 'Owner';
+  mocks.profileState.profile.workplaceId = null;
+  mocks.auth.getSession.mockResolvedValue({ data: { session: {
+    ...session, user: { ...session.user, user_metadata: { role: 'owner' } },
+  } }, error: null });
+  await act(async () => { tree = create(<App />); });
+  expect(text()).toContain('Join your workplace');
+  mocks.profileState.profile.workplaceId = 'staff-looking-workplace';
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Customer prototype');
+  await press('Customer prototype');
+  expect(text()).not.toContain('Next stop');
+});
+
+test('production ignores an existing DEV preview override and follows profile changes', async () => {
+  vi.stubGlobal('__DEV__', true);
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  await act(async () => { tree = create(<App />); });
+  await press('Customer prototype');
+  expect(text()).toContain('Next stop');
+  vi.stubGlobal('__DEV__', false);
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Customer prototype');
+  mocks.profileState.profile.role = 'owner';
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Next stop');
+  mocks.profileState.profile.role = 'customer';
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Customer prototype');
+});
+
+test.each(['admin', '', null])('unexpected role %s blocks both app screens and retains retry/logout', async (role) => {
+  mocks.profileState.profile.role = role as unknown as string;
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  await act(async () => { tree = create(<App />); });
+  expect(text()).toContain('Your account role is not supported');
+  expect(text()).not.toContain('Customer prototype');
+  expect(text()).not.toContain('Next stop');
+  await press('Try again');
+  expect(mocks.profileState.reload).toHaveBeenCalledOnce();
+  mocks.auth.signOut.mockImplementation(async () => {
+    mocks.listener?.('SIGNED_OUT', null);
+    return { error: null };
+  });
+  await press('Log out');
+  expect(text()).toContain('Welcome back');
+});
+
+test.each(['owner', 'driver'])('%s entry waits for profile and supports logout failure, busy state and retry', async (role) => {
+  mocks.profileState.profile.role = role;
+  mocks.profileState.loading = true;
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  await act(async () => { tree = create(<App />); });
+  expect(text()).not.toContain('Next stop');
+  expect(text()).not.toContain('Customer prototype');
+  mocks.profileState.loading = false;
+  mocks.profileState.error = 'Profile unavailable';
+  await act(async () => tree.update(<App />));
+  expect(text()).not.toContain('Next stop');
+  expect(text()).not.toContain('Customer prototype');
+  mocks.profileState.error = null;
+  await act(async () => tree.update(<App />));
+  expect(text()).toContain('Next stop');
+  mocks.auth.signOut.mockResolvedValueOnce({ error: { message: 'Network unavailable' } });
+  await press('Log out');
+  expect(text()).toContain('Network unavailable');
+  expect(text()).toContain('Next stop');
+  let finishLogout!: () => void;
+  mocks.auth.signOut.mockImplementationOnce(() => new Promise((resolve) => {
+    finishLogout = () => { mocks.listener?.('SIGNED_OUT', null); resolve({ error: null }); };
+  }));
+  const button = tree.root.findAllByType('Pressable' as never).find((node) => node.findAllByType('Text' as never).some((child) => child.props.children === 'Log out'))!;
+  let pending!: Promise<void>;
+  await act(async () => { pending = button.props.onPress(); });
+  expect(button.props.disabled).toBe(true);
+  expect(text()).toContain('Logging out');
+  await act(async () => { finishLogout(); await pending; });
+  expect(mocks.auth.signOut).toHaveBeenLastCalledWith({ scope: 'local' });
+  expect(text()).toContain('Welcome back');
+});
+
+test('local reservation records the authenticated UUID and crew retains fixture operations', async () => {
+  vi.stubGlobal('__DEV__', true);
+  const userId = '00000000-0000-4000-8000-000000000001';
+  mocks.auth.getSession.mockResolvedValue({ data: { session: {
+    ...session, user: { id: userId },
+  } }, error: null });
+  await act(async () => { tree = create(<App />); });
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await act(async () => tree.root.findByType(CustomerScreen).props.onReserve(product, 1, 'No sauce'));
+  const customerProps = tree.root.findByType(CustomerScreen).props;
+  expect(customerProps.orders[0]).toMatchObject({
+    customerId: userId, customer: 'Kris', productId: product.id, quantity: 1,
+  });
+  expect(customerProps.orders.slice(1)).toEqual(fixtureOrders);
+  await press('Customer prototype');
+  expect(text()).toContain('Next stop');
+  for (const order of fixtureOrders) expect(text()).toContain(order.customer);
+  const handover = tree.root.findByProps({ accessibilityLabel: 'Hand over for order 104' });
+  await act(async () => handover.props.onPress());
+  expect(tree.root.findByProps({ accessibilityLabel: 'Collected for order 104' }).props.disabled).toBe(true);
+});
+
+
+async function openLocalCustomer() {
+  vi.stubGlobal('__DEV__', true);
+  mocks.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  await act(async () => { tree = create(<App />); });
+  return tree.root.findByType(CustomerScreen).props;
+}
+
+test('reservation creates one order and reserves exactly the requested quantity', async () => {
+  const before = await openLocalCustomer();
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await act(async () => before.onReserve(product, 2, 'No sauce'));
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders).toHaveLength(before.orders.length + 1);
+  expect(after.orders[0]).toMatchObject({ productId: product.id, quantity: 2, customerId: session.user.id });
+  expect(after.inventory[product.id]).toEqual({ ...before.inventory[product.id], reserved: before.inventory[product.id].reserved + 2 });
+});
+
+test.each([100, 0, -1, 1.5, NaN])('unreservable quantity %s leaves orders and stock unchanged', async (quantity) => {
+  const before = await openLocalCustomer();
+  await act(async () => before.onReserve(products[1], quantity, 'No sauce'));
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders).toEqual(before.orders);
+  expect(after.inventory).toEqual(before.inventory);
+});
+
+test('batched reservations cannot create orders beyond reservable stock', async () => {
+  const before = await openLocalCustomer();
+  const product = products.find((item) => item.id === 'full-english')!;
+  await act(async () => {
+    before.onReserve(product, 2, 'No sauce');
+    before.onReserve(product, 2, 'No sauce');
+  });
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders).toHaveLength(before.orders.length + 1);
+  expect(after.inventory[product.id]).toEqual({ ...before.inventory[product.id], reserved: before.inventory[product.id].reserved + 2 });
+});
+
+test('successful reservations in the same millisecond have distinct IDs', async () => {
+  const before = await openLocalCustomer();
+  vi.spyOn(Date, 'now').mockReturnValue(123456789);
+  await act(async () => {
+    before.onReserve(products[1], 1, 'No sauce');
+    before.onReserve(products[1], 1, 'Brown sauce');
+  });
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders).toHaveLength(before.orders.length + 2);
+  expect(new Set(after.orders.map((order: { id: string }) => order.id)).size).toBe(after.orders.length);
+  expect(after.inventory[products[1].id].reserved).toBe(before.inventory[products[1].id].reserved + 2);
+});
+
+test('duplicate handovers deduct once and unrelated orders still advance', async () => {
+  await openLocalCustomer();
+  await press('Customer prototype');
+  const before = tree.root.findByType(DriverScreen).props;
+  const handover = before.onAdvanceOrder;
+  await act(async () => { handover('1'); handover('1'); });
+  const after = tree.root.findByType(DriverScreen).props;
+  expect(after.orders.find((order: { id: string }) => order.id === '1').status).toBe('collected');
+  expect(after.inventory['bacon-egg']).toEqual({ ...before.inventory['bacon-egg'], physical: 7, reserved: 0 });
+  await act(async () => { handover('1'); after.onAdvanceOrder('1'); after.onAdvanceOrder('missing'); });
+  expect(tree.root.findByType(DriverScreen).props.inventory).toEqual(after.inventory);
+  await act(async () => tree.root.findByType(DriverScreen).props.onAdvanceOrder('2'));
+  const other = tree.root.findByType(DriverScreen).props;
+  expect(other.orders.find((order: { id: string }) => order.id === '2').status).toBe('collected');
+  expect(other.inventory['sausage-egg']).toEqual({ ...before.inventory['sausage-egg'], physical: 10, reserved: 0 });
+});
+
+test('repeated made-to-order callbacks cannot skip preparation or undo collection', async () => {
+  const customer = await openLocalCustomer();
+  const product = products.find((item) => item.id === 'ham-cheese-toastie')!;
+  await act(async () => customer.onReserve(product, 1, 'No sauce'));
+  const id = tree.root.findByType(CustomerScreen).props.orders[0].id;
+  await press('Customer prototype');
+  const initial = tree.root.findByType(DriverScreen).props;
+  const start = initial.onAdvanceOrder;
+  await act(async () => { start(id); start(id); });
+  expect(tree.root.findByType(DriverScreen).props.orders[0].status).toBe('preparing');
+  await act(async () => start(id));
+  expect(tree.root.findByType(DriverScreen).props.orders[0].status).toBe('preparing');
+  for (const expected of ['ready', 'collected']) {
+    const advance = tree.root.findByType(DriverScreen).props.onAdvanceOrder;
+    await act(async () => { advance(id); advance(id); });
+    expect(tree.root.findByType(DriverScreen).props.orders[0].status).toBe(expected);
+  }
+  const final = tree.root.findByType(DriverScreen).props;
+  expect(final.inventory[product.id]).toEqual({ ...initial.inventory[product.id], physical: 5, reserved: 0 });
+  await act(async () => start(id));
+  expect(tree.root.findByType(DriverScreen).props.orders[0].status).toBe('collected');
+  expect(tree.root.findByType(DriverScreen).props.inventory).toEqual(final.inventory);
+});
+
+test('walk-up sale and undo preserve orders and the local ID sequence', async () => {
+  const customer = await openLocalCustomer();
+  await act(async () => customer.onReserve(products[1], 1, 'No sauce'));
+  const firstId = tree.root.findByType(CustomerScreen).props.orders[0].id;
+  await press('Customer prototype');
+  const before = tree.root.findByType(DriverScreen).props;
+  await act(async () => before.onWalkUpSale('bacon-egg', 'Acero'));
+  const sold = tree.root.findByType(DriverScreen).props;
+  expect(sold.orders).toEqual(before.orders);
+  expect(sold.inventory['bacon-egg'].physical).toBe(before.inventory['bacon-egg'].physical - 1);
+  await act(async () => sold.onUndoWalkUpSale(sold.walkUpSales[0].id));
+  const undone = tree.root.findByType(DriverScreen).props;
+  expect(undone.inventory).toEqual(before.inventory);
+  expect(undone.orders).toEqual(before.orders);
+  await press('DEV · CUSTOMER');
+  await act(async () => tree.root.findByType(CustomerScreen).props.onReserve(products[1], 1, 'No sauce'));
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders[0].id).not.toBe(firstId);
+  expect(after.orders).toHaveLength(before.orders.length + 1);
 });

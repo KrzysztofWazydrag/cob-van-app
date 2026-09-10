@@ -89,7 +89,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
 
   const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
   const visibleProducts = products.filter((product) => product.available && product.category === category);
-  const customerOrders = orders.filter((order) => order.id === '1' || order.customer === displayName);
+  const customerOrders = orders.filter((order) => order.customerId === user.id);
 
   const renderProductCard = (product: Product) => {
     const available = reservableCount(inventory[product.id]);
@@ -192,8 +192,8 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
         <View style={styles.cutoffCard}>
           <View style={styles.cutoffClock}><Text style={styles.cutoffClockText}>◷</Text></View>
           <View style={styles.cutoffCopy}>
-            <Text style={styles.cutoffTitle}>Breakfast orders close at 9:45</Text>
-            <Text style={styles.cutoffBody}>18 minutes left to reserve for {workplaceName}</Text>
+            <Text style={styles.cutoffTitle}>Reserve from the menu</Text>
+            <Text style={styles.cutoffBody}>Browse available food for {workplaceName}</Text>
           </View>
         </View>
 
@@ -351,7 +351,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
                     <Text style={styles.reservePrice}>£{(selected.price * quantity).toFixed(2)}</Text>
                   </Pressable>
                 </View>
-                <Text style={styles.payNote}>No payment now · Your food is held for 10 minutes</Text>
+                <Text style={styles.payNote}>No payment now</Text>
               </>
             ) : null}
           </View>

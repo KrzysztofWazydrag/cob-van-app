@@ -70,6 +70,7 @@ export type OrderStatus = 'reserved' | 'preparing' | 'ready' | 'collected';
 export type Order = {
   id: string;
   orderNumber: number;
+  customerId?: string;
   customer: string;
   initials: string;
   productId: string;

@@ -23,20 +23,84 @@ import {
 } from './src/data';
 import { notifyVanArrived } from './src/notifications';
 
-type StockState = {
+type LocalOrderState = {
+  orders: Order[];
+  nextOrderId: number;
   inventory: Inventory;
   walkUpSales: WalkUpSaleEvent[];
 };
 
-type StockAction =
-  | { type: 'reserve'; productId: string; quantity: number }
-  | { type: 'collect'; productId: string; quantity: number }
+type LocalOrderAction =
+  | { type: 'reserve'; order: Omit<Order, 'id' | 'orderNumber'> }
+  | { type: 'advance'; orderId: string; expectedStatus: Order['status'] }
   | { type: 'sellWalkUp'; event: WalkUpSaleEvent }
   | { type: 'undoWalkUp'; eventId: string };
 
 const currentWorkplace = 'Acero';
 
-function stockReducer(state: StockState, action: StockAction): StockState {
+function localOrderReducer(state: LocalOrderState, action: LocalOrderAction): LocalOrderState {
+  if (action.type === 'reserve') {
+    const { productId, quantity } = action.order;
+    const stock = state.inventory[productId];
+    if (!Number.isSafeInteger(quantity) || quantity <= 0 || !stock
+      || stock.physical - stock.reserved - stock.walkUpBuffer < quantity) return state;
+
+    const order: Order = {
+      ...action.order,
+      id: `local-${state.nextOrderId}`,
+      orderNumber: Math.max(...state.orders.map((item) => item.orderNumber), 100) + 1,
+    };
+    return {
+      ...state,
+      nextOrderId: state.nextOrderId + 1,
+      orders: [order, ...state.orders],
+      inventory: {
+        ...state.inventory,
+        [productId]: { ...stock, reserved: stock.reserved + quantity },
+      },
+    };
+  }
+
+  if (action.type === 'advance') {
+    const order = state.orders.find((item) => item.id === action.orderId);
+    if (!order || order.status !== action.expectedStatus) return state;
+
+    let nextStatus: Order['status'];
+    switch (order.status) {
+      case 'reserved':
+        nextStatus = order.fulfilmentType === 'ready_stock' ? 'ready' : 'preparing';
+        break;
+      case 'preparing':
+        nextStatus = 'ready';
+        break;
+      case 'ready':
+        nextStatus = 'collected';
+        break;
+      default:
+        return state;
+    }
+
+    let inventory = state.inventory;
+    if (nextStatus === 'collected') {
+      const stock = inventory[order.productId];
+      if (!stock || !Number.isSafeInteger(order.quantity) || order.quantity <= 0
+        || stock.physical < order.quantity || stock.reserved < order.quantity) return state;
+      inventory = {
+        ...inventory,
+        [order.productId]: {
+          ...stock,
+          physical: stock.physical - order.quantity,
+          reserved: stock.reserved - order.quantity,
+        },
+      };
+    }
+    return {
+      ...state,
+      inventory,
+      orders: state.orders.map((item) => item.id === order.id ? { ...item, status: nextStatus } : item),
+    };
+  }
+
   if (action.type === 'undoWalkUp') {
     const latestSale = state.walkUpSales[0];
     if (!latestSale || latestSale.id !== action.eventId) return state;
@@ -45,6 +109,7 @@ function stockReducer(state: StockState, action: StockAction): StockState {
     if (!stock) return state;
 
     return {
+      ...state,
       inventory: {
         ...state.inventory,
         [latestSale.productId]: {
@@ -57,40 +122,16 @@ function stockReducer(state: StockState, action: StockAction): StockState {
     };
   }
 
-  const productId = action.type === 'sellWalkUp' ? action.event.productId : action.productId;
+  const productId = action.event.productId;
   const stock = state.inventory[productId];
   if (!stock) return state;
-
-  if (action.type === 'reserve') {
-    if (stock.physical - stock.reserved - stock.walkUpBuffer < action.quantity) return state;
-    return {
-      ...state,
-      inventory: {
-        ...state.inventory,
-        [productId]: { ...stock, reserved: stock.reserved + action.quantity },
-      },
-    };
-  }
-
-  if (action.type === 'collect') {
-    return {
-      ...state,
-      inventory: {
-        ...state.inventory,
-        [productId]: {
-          ...stock,
-          physical: Math.max(stock.physical - action.quantity, 0),
-          reserved: Math.max(stock.reserved - action.quantity, 0),
-        },
-      },
-    };
-  }
 
   if (stock.walkUpBuffer < action.event.quantity || stock.physical - stock.reserved < action.event.quantity) {
     return state;
   }
 
   return {
+    ...state,
     inventory: {
       ...state.inventory,
       [productId]: {
@@ -115,13 +156,17 @@ export default function App() {
 
 function AuthenticatedCobVanApp({ session, signOut, signOutError, signingOut }: AuthenticatedAppProps) {
   const { error: profileError, profile, loading, reload } = useCurrentProfile(session.user);
-  if (loading || profileError) {
+  const roleError = !loading && !['customer', 'owner', 'driver'].includes(profile.role)
+    ? 'Your account role is not supported. Please contact support.'
+    : null;
+  const entryError = profileError || roleError;
+  if (loading || entryError) {
     return (
       <SafeAreaView style={styles.profileStatus}>
         <StatusBar style="dark" />
         {loading ? <ActivityIndicator color={colors.ink} /> : null}
-        <Text accessibilityRole={profileError ? 'alert' : undefined}>{profileError || 'Loading your profile…'}</Text>
-        {profileError ? <Pressable accessibilityRole="button" onPress={reload} style={styles.retry}><Text>Try again</Text></Pressable> : null}
+        <Text accessibilityRole={entryError ? 'alert' : undefined}>{entryError || 'Loading your profile…'}</Text>
+        {entryError ? <Pressable accessibilityRole="button" onPress={reload} style={styles.retry}><Text>Try again</Text></Pressable> : null}
         {signOutError ? <Text accessibilityRole="alert">{signOutError}</Text> : null}
         <Pressable accessibilityRole="button" disabled={signingOut} onPress={signOut} style={styles.retry}><Text>{signingOut ? 'Logging out…' : 'Log out'}</Text></Pressable>
       </SafeAreaView>
@@ -143,12 +188,16 @@ function AuthenticatedCobVanApp({ session, signOut, signOutError, signingOut }: 
 }
 
 function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signingOut, user }: { onSignOut: () => Promise<void>; profile: CurrentProfile; profileError: string | null; signOutError: string | null; signingOut: boolean; user: User }) {
-  const [role, setRole] = useState<Role>('customer');
-  const [{ inventory, walkUpSales }, dispatchStock] = useReducer(stockReducer, {
+  const [devPreviewRole, setDevPreviewRole] = useState<Role | null>(null);
+  const role = __DEV__ && devPreviewRole !== null
+    ? devPreviewRole
+    : profile.role === 'owner' || profile.role === 'driver' ? 'driver' : 'customer';
+  const [{ orders, inventory, walkUpSales }, dispatchLocalOrder] = useReducer(localOrderReducer, {
+    orders: initialOrders,
+    nextOrderId: 1,
     inventory: initialInventory,
     walkUpSales: [],
   });
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [buildPricing, setBuildPricing] = useState<BuildYourOwnPricing>(initialBuildYourOwnPricing);
   const [stopMode, setStopMode] = useState(false);
@@ -159,15 +208,13 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
 
   const reserveProduct = (product: Product, quantity: number, options: string) => {
     const currentProduct = pricedProducts.find((item) => item.id === product.id);
-    const stock = inventory[product.id];
-    if (!currentProduct?.available || !stock || stock.physical - stock.reserved - stock.walkUpBuffer < quantity) return;
+    if (!currentProduct?.available) return;
     const orderedProduct = product.custom ? product : currentProduct;
 
-    dispatchStock({ productId: product.id, quantity, type: 'reserve' });
-    setOrders((current) => [
-      {
-        id: `local-${Date.now()}`,
-        orderNumber: Math.max(...current.map((order) => order.orderNumber), 100) + 1,
+    dispatchLocalOrder({
+      type: 'reserve',
+      order: {
+        customerId: user.id,
         customer: profile.displayName,
         initials: profile.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'CV',
         productId: product.id,
@@ -178,27 +225,14 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
         status: orderedProduct.fulfilmentType === 'ready_stock' ? 'ready' : 'reserved',
         fulfilmentType: orderedProduct.fulfilmentType,
       },
-      ...current,
-    ]);
+    });
   };
 
   const advanceOrder = (orderId: string) => {
     const order = orders.find((item) => item.id === orderId);
     if (!order || order.status === 'collected') return;
 
-    const nextStatus = order.status === 'reserved'
-      ? (order.fulfilmentType === 'ready_stock' ? 'ready' : 'preparing')
-      : order.status === 'preparing'
-        ? 'ready'
-        : 'collected';
-
-    if (nextStatus === 'collected') {
-      dispatchStock({ productId: order.productId, quantity: order.quantity, type: 'collect' });
-    }
-
-    setOrders((current) => current.map((item) => (
-      item.id === orderId ? { ...item, status: nextStatus } : item
-    )));
+    dispatchLocalOrder({ type: 'advance', orderId, expectedStatus: order.status });
   };
 
   const recordWalkUpSale = (productId: string, workplace: string) => {
@@ -207,7 +241,7 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
     if (!product?.available || product.fulfilmentType !== 'ready_stock' || !stock || stock.walkUpBuffer <= 0 || stock.physical <= stock.reserved) return;
 
     const timestamp = Math.max(Date.now(), (walkUpSales[0]?.timestamp ?? 0) + 1);
-    dispatchStock({
+    dispatchLocalOrder({
       event: {
         id: `${productId}-${timestamp}`,
         productId,
@@ -221,7 +255,7 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
   };
 
   const undoWalkUpSale = (eventId: string) => {
-    dispatchStock({ eventId, type: 'undoWalkUp' });
+    dispatchLocalOrder({ eventId, type: 'undoWalkUp' });
   };
 
   const toggleStopMode = () => {
@@ -244,7 +278,7 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
           buildPricing={buildPricing}
           displayName={profile.displayName}
           inventory={inventory}
-          onOpenDriverPreview={() => setRole('driver')}
+          onOpenDriverPreview={() => { if (__DEV__) setDevPreviewRole('driver'); }}
           onReserve={reserveProduct}
           onSignOut={onSignOut}
           orders={orders}
@@ -262,7 +296,10 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
           currentWorkplace={currentWorkplace}
           inventory={inventory}
           onAdvanceOrder={advanceOrder}
-          onRolePress={() => setRole('customer')}
+          onRolePress={() => { if (__DEV__) setDevPreviewRole('customer'); }}
+          onSignOut={onSignOut}
+          signOutError={signOutError}
+          signingOut={signingOut}
           onSaveBuildPricing={setBuildPricing}
           onSaveProduct={saveProductMenuSettings}
           onToggleStopMode={toggleStopMode}
