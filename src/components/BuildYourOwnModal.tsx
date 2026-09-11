@@ -12,9 +12,10 @@ import {
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type BuildYourOwnModalProps = {
+  onlineOrderingOpen: boolean;
   available: number;
   onClose: () => void;
-  onReserve: (product: Product, quantity: number, options: string) => void;
+  onReserve: (product: Product, quantity: number, options: string) => boolean;
   pricing: BuildYourOwnPricing;
   visible: boolean;
 };
@@ -34,7 +35,7 @@ const fillingImages: Record<BuildFillingName, ImageSourcePropType> = {
 
 const sauces = ['No sauce', 'Brown sauce', 'Red sauce'] as const;
 
-export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visible }: BuildYourOwnModalProps) {
+export function BuildYourOwnModal({ onlineOrderingOpen, available, onClose, onReserve, pricing, visible }: BuildYourOwnModalProps) {
   const [base, setBase] = useState<BuildBaseName>(buildBaseNames[0]);
   const [selectedFillings, setSelectedFillings] = useState<BuildFillingName[]>([]);
   const [sauce, setSauce] = useState<(typeof sauces)[number]>(sauces[0]);
@@ -49,7 +50,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visi
   }, [visible]);
 
   const unitPrice = pricing.bases[base] + selectedFillings.reduce((sum, filling) => sum + pricing.fillings[filling], 0);
-  const canReserve = available > 0 && selectedFillings.length > 0;
+  const canReserve = onlineOrderingOpen && Number.isSafeInteger(quantity) && quantity > 0 && quantity <= available && selectedFillings.length > 0;
 
   const toggleFilling = (filling: BuildFillingName) => {
     setSelectedFillings((current) => current.includes(filling)
@@ -60,7 +61,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visi
   const reserve = () => {
     if (!canReserve) return;
 
-    onReserve(
+    const result = onReserve(
       {
         available: true,
         id: 'build-your-own',
@@ -75,7 +76,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visi
       quantity,
       `Base: ${base}\nFillings: ${selectedFillings.join(', ')}\nSauce: ${sauce}`,
     );
-    onClose();
+    if (result === true) onClose();
   };
 
   return (
@@ -153,6 +154,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visi
               </View>
               <Text style={styles.summaryPrice}>£{unitPrice.toFixed(2)}</Text>
             </View>
+            <Text style={styles.summaryLine}>{available} available</Text>
             <Text style={styles.summaryLine}>Base: {base}</Text>
             <Text style={styles.summaryLine}>
               Fillings: {selectedFillings.length > 0 ? selectedFillings.join(', ') : 'Choose at least one'}
@@ -183,7 +185,7 @@ export function BuildYourOwnModal({ available, onClose, onReserve, pricing, visi
             onPress={reserve}
             style={[styles.reserveButton, !canReserve && styles.reserveButtonDisabled]}
           >
-            <Text style={styles.reserveText}>{available === 0 ? 'Sold out' : selectedFillings.length === 0 ? 'Choose a filling' : 'Reserve mine'}</Text>
+            <Text style={styles.reserveText}>{!onlineOrderingOpen ? 'Online ordering closed' : available === 0 ? 'Sold out' : selectedFillings.length === 0 ? 'Choose a filling' : 'Reserve mine'}</Text>
             <Text style={styles.reservePrice}>£{(unitPrice * quantity).toFixed(2)}</Text>
           </Pressable>
         </View>

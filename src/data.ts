@@ -85,7 +85,6 @@ export type Order = {
 export type StockLevel = {
   physical: number;
   reserved: number;
-  walkUpBuffer: number;
 };
 
 export type Inventory = Record<string, StockLevel>;
@@ -100,22 +99,22 @@ export type WalkUpSaleEvent = {
 };
 
 export const initialInventory: Inventory = {
-  'build-your-own': { physical: 10, reserved: 0, walkUpBuffer: 2 },
-  'bacon-egg': { physical: 8, reserved: 1, walkUpBuffer: 3 },
-  'sausage-egg': { physical: 12, reserved: 2, walkUpBuffer: 2 },
-  'bacon-cheese-tomato': { physical: 7, reserved: 0, walkUpBuffer: 2 },
-  'coronation-chicken': { physical: 5, reserved: 0, walkUpBuffer: 1 },
-  'ham-cheese-toastie': { physical: 6, reserved: 0, walkUpBuffer: 0 },
-  'tuna-mayo': { physical: 5, reserved: 0, walkUpBuffer: 1 },
-  'egg-mayo': { physical: 6, reserved: 0, walkUpBuffer: 1 },
-  'breakfast-wrap': { physical: 7, reserved: 1, walkUpBuffer: 2 },
-  'veggie-wrap': { physical: 5, reserved: 0, walkUpBuffer: 1 },
-  'small-english': { physical: 5, reserved: 0, walkUpBuffer: 1 },
-  'full-english': { physical: 4, reserved: 0, walkUpBuffer: 1 },
+  'build-your-own': { physical: 10, reserved: 0 },
+  'bacon-egg': { physical: 8, reserved: 1 },
+  'sausage-egg': { physical: 12, reserved: 2 },
+  'bacon-cheese-tomato': { physical: 7, reserved: 0 },
+  'coronation-chicken': { physical: 5, reserved: 0 },
+  'ham-cheese-toastie': { physical: 6, reserved: 0 },
+  'tuna-mayo': { physical: 5, reserved: 0 },
+  'egg-mayo': { physical: 6, reserved: 0 },
+  'breakfast-wrap': { physical: 7, reserved: 1 },
+  'veggie-wrap': { physical: 5, reserved: 0 },
+  'small-english': { physical: 5, reserved: 0 },
+  'full-english': { physical: 4, reserved: 0 },
 };
 
-export function reservableCount(stock: StockLevel) {
-  return Math.max(stock.physical - stock.reserved - stock.walkUpBuffer, 0);
+export function availableStock(stock: StockLevel) {
+  return Math.max(stock.physical - stock.reserved, 0);
 }
 
 export const products: Product[] = [

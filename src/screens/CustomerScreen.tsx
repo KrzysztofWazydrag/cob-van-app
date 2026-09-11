@@ -1,3 +1,5 @@
+import { canOrderOnline } from '../onlineOrdering';
+import { useOnlineOrdering } from '../useOnlineOrdering';
 import { useState } from 'react';
 import {
   ImageBackground,
@@ -18,15 +20,16 @@ import { FoodImage } from '../components/FoodImage';
 import { InVanStockView } from '../components/InVanStockView';
 import { VanTrackingModal } from '../components/VanTrackingModal';
 import { ProfileScreen } from './ProfileScreen';
-import { reservableCount, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product } from '../data';
+import { availableStock, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type CustomerScreenProps = {
+  orderCutoffAt: number;
   buildPricing: BuildYourOwnPricing;
   displayName: string;
   inventory: Inventory;
   onOpenDriverPreview: () => void;
-  onReserve: (product: Product, quantity: number, options: string) => void;
+  onReserve: (product: Product, quantity: number, options: string) => boolean;
   onSignOut: () => Promise<void>;
   orders: Order[];
   products: Product[];
@@ -54,7 +57,8 @@ const statusLabels: Record<OrderStatus, string> = {
   collected: 'Collected',
 };
 
-export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, user }: CustomerScreenProps) {
+export function CustomerScreen({ orderCutoffAt, buildPricing, displayName, inventory, onOpenDriverPreview, onReserve, onSignOut, orders, products, profile, profileError, signOutError, signingOut, user }: CustomerScreenProps) {
+  const onlineOrderingOpen = useOnlineOrdering(orderCutoffAt);
   const workplaceName = profile.workplaceName || 'Your workplace';
   const weekday = new Date().toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
   const insets = useSafeAreaInsets();
@@ -68,6 +72,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
   const [tab, setTab] = useState<CustomerTab>('home');
 
   const openProduct = (product: Product) => {
+    if (!canOrderOnline(orderCutoffAt, Date.now())) return;
     setSelected(product);
     setSauce(sauces[0]);
     setQuantity(1);
@@ -76,52 +81,48 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
   const closeProduct = () => setSelected(null);
 
   const reserve = () => {
-    if (!selected || reservableCount(inventory[selected.id]) < quantity) return;
-    onReserve(selected, quantity, selected.id === 'tuna-mayo' ? 'No sauce' : sauce);
+    if (!canOrderOnline(orderCutoffAt, Date.now()) || !selected || availableStock(inventory[selected.id]) < quantity) return;
+    if (onReserve(selected, quantity, selected.id === 'tuna-mayo' ? 'No sauce' : sauce) !== true) return;
     setReserved(true);
     setSelected(null);
   };
 
   const totalAvailable = products.reduce(
-    (sum, product) => sum + (product.available ? reservableCount(inventory[product.id]) : 0),
+    (sum, product) => sum + (product.available ? availableStock(inventory[product.id]) : 0),
     0,
   );
 
-  const selectedAvailable = selected ? reservableCount(inventory[selected.id]) : 0;
+  const selectedAvailable = selected ? availableStock(inventory[selected.id]) : 0;
   const visibleProducts = products.filter((product) => product.available && product.category === category);
   const customerOrders = orders.filter((order) => order.customerId === user.id);
 
   const renderProductCard = (product: Product) => {
-    const available = reservableCount(inventory[product.id]);
-    const showLowStock = product.category === 'cobs' && available <= 3;
-    const stockLabel = available === 0
-      ? 'SOLD OUT ONLINE'
-      : showLowStock
-        ? `ONLY ${available} LEFT`
-        : product.badge;
+    const available = availableStock(inventory[product.id]);
     return (
       <Pressable
         accessibilityLabel={`Choose ${product.name}, £${product.price.toFixed(2)}`}
-        accessibilityState={{ disabled: available === 0 }}
+        accessibilityState={{ disabled: !onlineOrderingOpen || available === 0 }}
+        disabled={!onlineOrderingOpen || available === 0}
         key={product.id}
         onPress={() => {
-          if (available === 0) return;
+          if (!canOrderOnline(orderCutoffAt, Date.now()) || available === 0) return;
           if (product.custom) setBuilding(true);
           else openProduct(product);
         }}
-        style={({ pressed }) => [styles.productCard, available === 0 && styles.cardDisabled, pressed && styles.cardPressed]}
+        style={({ pressed }) => [styles.productCard, (!onlineOrderingOpen || available === 0) && styles.cardDisabled, pressed && styles.cardPressed]}
       >
         <View style={styles.productImageWrap}>
           <FoodImage image={product.image} />
-          {stockLabel ? (
-            <View style={[styles.badge, (available === 0 || showLowStock) && styles.badgeUrgent]}>
-              <Text style={styles.badgeText}>{stockLabel}</Text>
+          {product.badge ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{product.badge}</Text>
             </View>
           ) : null}
         </View>
         <View style={styles.productCopy}>
           <Text style={styles.productName}>{product.name}</Text>
           <Text numberOfLines={2} style={styles.productDescription}>{product.description}</Text>
+          <Text style={styles.sheetStock}>{available} available</Text>
           <View style={styles.productBottom}>
             <Text style={styles.price}>{product.custom ? 'FROM ' : ''}£{product.price.toFixed(2)}</Text>
             <View style={[styles.addButton, available === 0 && styles.addButtonDisabled]}>
@@ -136,6 +137,11 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {!onlineOrderingOpen ? (
+          <View style={styles.cutoffCard}>
+            <Text accessibilityRole="alert" style={styles.cutoffBody}>Online ordering closed · Buy available food at the van. Existing reservations remain valid.</Text>
+          </View>
+        ) : null}
         {tab === 'home' ? <View style={styles.topBar}>
           <View>
             <Text style={styles.eyebrow}>{weekday} · {workplaceName}</Text>
@@ -192,17 +198,17 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
         <View style={styles.cutoffCard}>
           <View style={styles.cutoffClock}><Text style={styles.cutoffClockText}>◷</Text></View>
           <View style={styles.cutoffCopy}>
-            <Text style={styles.cutoffTitle}>Reserve from the menu</Text>
+            <Text style={styles.cutoffTitle}>{onlineOrderingOpen ? 'Reserve from the menu' : 'Online ordering closed'}</Text>
             <Text style={styles.cutoffBody}>Browse available food for {workplaceName}</Text>
           </View>
         </View>
 
         <View style={styles.sectionHeading}>
           <View>
-            <Text style={styles.sectionTitle}>Order ahead</Text>
-            <Text style={styles.sectionHint}>Choose from today’s menu before the van arrives.</Text>
+            <Text style={styles.sectionTitle}>{onlineOrderingOpen ? 'Order ahead' : 'Today’s menu'}</Text>
+            <Text style={styles.sectionHint}>{onlineOrderingOpen ? 'Choose from today’s menu before online ordering closes.' : 'Browse remaining stock to buy at the van.'}</Text>
           </View>
-          <Text style={styles.available}>{totalAvailable} to reserve</Text>
+          <Text style={styles.available}>{totalAvailable} available</Text>
         </View>
 
         <ScrollView
@@ -227,7 +233,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
 
           </>
         ) : tab === 'inVan' ? (
-          <InVanStockView inventory={inventory} onChoose={openProduct} products={products} />
+          <InVanStockView onlineOrderingOpen={onlineOrderingOpen} inventory={inventory} onChoose={openProduct} products={products} />
         ) : tab === 'orders' ? (
           <View style={styles.tabScreen}>
             <Text style={styles.tabEyebrow}>{workplaceName} · TODAY</Text>
@@ -312,7 +318,7 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
                   <View style={styles.sheetTitleWrap}>
                     <Text style={styles.sheetTitle}>{selected.name}</Text>
                     <Text style={styles.sheetPrice}>£{selected.price.toFixed(2)}</Text>
-                    <Text style={styles.sheetStock}>{selectedAvailable} available to reserve</Text>
+                    <Text style={styles.sheetStock}>{selectedAvailable} available</Text>
                   </View>
                 </View>
                 {selected.id !== 'tuna-mayo' ? (
@@ -342,12 +348,12 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
                     </Pressable>
                   </View>
                   <Pressable
-                    accessibilityState={{ disabled: selectedAvailable === 0 }}
-                    disabled={selectedAvailable === 0}
+                    accessibilityState={{ disabled: !onlineOrderingOpen || selectedAvailable === 0 }}
+                    disabled={!onlineOrderingOpen || selectedAvailable === 0}
                     onPress={reserve}
-                    style={[styles.reserveButton, selectedAvailable === 0 && styles.reserveButtonDisabled]}
+                    style={[styles.reserveButton, (!onlineOrderingOpen || selectedAvailable === 0) && styles.reserveButtonDisabled]}
                   >
-                    <Text style={styles.reserveText}>{selectedAvailable === 0 ? 'Buy at the van' : 'Reserve mine'}</Text>
+                    <Text style={styles.reserveText}>{!onlineOrderingOpen ? 'Online ordering closed' : selectedAvailable === 0 ? 'Buy at the van' : 'Reserve mine'}</Text>
                     <Text style={styles.reservePrice}>£{(selected.price * quantity).toFixed(2)}</Text>
                   </Pressable>
                 </View>
@@ -358,11 +364,14 @@ export function CustomerScreen({ buildPricing, displayName, inventory, onOpenDri
         </View>
       </Modal>
       <BuildYourOwnModal
-        available={reservableCount(inventory['build-your-own'])}
+        onlineOrderingOpen={onlineOrderingOpen}
+        available={availableStock(inventory['build-your-own'])}
         onClose={() => setBuilding(false)}
         onReserve={(product, customQuantity, options) => {
-          onReserve(product, customQuantity, options);
+          if (!canOrderOnline(orderCutoffAt, Date.now())) return false;
+          if (onReserve(product, customQuantity, options) !== true) return false;
           setReserved(true);
+          return true;
         }}
         pricing={buildPricing}
         visible={building}
@@ -422,7 +431,6 @@ const styles = StyleSheet.create({
   cardPressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
   productImageWrap: { height: 126, position: 'relative', width: 126 },
   badge: { backgroundColor: colors.mustard, borderRadius: radius.pill, left: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, position: 'absolute', top: spacing.sm },
-  badgeUrgent: { backgroundColor: colors.red },
   badgeText: { color: colors.paper, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   productCopy: { flex: 1, justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   productName: { color: colors.ink, flex: 1, fontSize: type.body, fontWeight: '900', paddingRight: spacing.xs },

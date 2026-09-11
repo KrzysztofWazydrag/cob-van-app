@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MenuPricesModal } from '../components/MenuPricesModal';
-import { reservableCount, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product, type WalkUpSaleEvent } from '../data';
+import { availableStock, type BuildYourOwnPricing, type Inventory, type Order, type OrderStatus, type Product, type WalkUpSaleEvent } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 
 type DriverScreenProps = {
@@ -87,7 +87,6 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
           </View>
           <View style={styles.progressTrack}><View style={styles.progressFill} /></View>
           <View style={styles.stopActions}>
-            <Pressable style={styles.navigateButton}><Text style={styles.navigateText}>↗  Navigate</Text></Pressable>
             <Pressable onPress={onToggleStopMode} style={[styles.arrivedButton, stopMode && styles.arrivedButtonDone]}>
               <Text style={[styles.arrivedText, stopMode && styles.arrivedTextDone]}>{stopMode ? '✓ Stop mode' : 'Mark arrived'}</Text>
             </Pressable>
@@ -99,7 +98,7 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
             <View style={styles.modeDot} />
             <View style={styles.modeCopy}>
               <Text style={styles.modeTitle}>Stop Mode is live</Text>
-              <Text style={styles.modeBody}>Walk-up buffer is protected. Record counter sales with one tap.</Text>
+              <Text style={styles.modeBody}>Reserved orders are protected. Record counter sales with one tap.</Text>
             </View>
           </View>
         ) : null}
@@ -193,7 +192,7 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
           <View>
             <View style={styles.listHeading}>
               <Text style={styles.listTitle}>Stock for {currentWorkplace}</Text>
-              <Text style={styles.listHint}>Physical stock split</Text>
+              <Text style={styles.listHint}>Shared physical stock</Text>
             </View>
             {recentSales.length > 0 ? (
               <View style={styles.recentSales}>
@@ -220,8 +219,8 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
             <View style={[styles.stockList, recentSales.length > 0 && styles.stockListAfterRecent]}>
               {products.filter((product) => product.fulfilmentType === 'ready_stock').map((product) => {
                 const stock = inventory[product.id];
-                const walkUpAvailable = Math.min(stock.walkUpBuffer, stock.physical - stock.reserved);
-                const canSellWalkUp = product.available && stopMode && walkUpAvailable > 0;
+                const available = availableStock(stock);
+                const canSellWalkUp = product.available && stopMode && available > 0;
 
                 return (
                   <View key={product.id} style={styles.stockCard}>
@@ -230,22 +229,22 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
                         <Text style={styles.stockItem}>{product.name}</Text>
                         <Text style={styles.stockTotal}>{stock.physical} physically in van</Text>
                       </View>
-                      <View style={[styles.stockHealth, reservableCount(stock) <= 2 && styles.stockHealthLow]}>
-                        <Text style={styles.stockHealthText}>{reservableCount(stock) <= 2 ? 'LOW' : 'HEALTHY'}</Text>
+                      <View style={[styles.stockHealth, availableStock(stock) <= 2 && styles.stockHealthLow]}>
+                        <Text style={styles.stockHealthText}>{availableStock(stock) <= 2 ? 'LOW' : 'HEALTHY'}</Text>
                       </View>
                     </View>
                     <View style={styles.stockMetrics}>
+                      <View style={styles.stockMetric}>
+                        <Text style={styles.stockMetricValue}>{stock.physical}</Text>
+                        <Text style={styles.stockMetricLabel}>PHYSICAL</Text>
+                      </View>
                       <View style={styles.stockMetric}>
                         <Text style={styles.stockMetricValue}>{stock.reserved}</Text>
                         <Text style={styles.stockMetricLabel}>RESERVED</Text>
                       </View>
                       <View style={styles.stockMetric}>
-                        <Text style={styles.stockMetricValue}>{reservableCount(stock)}</Text>
-                        <Text style={styles.stockMetricLabel}>ONLINE</Text>
-                      </View>
-                      <View style={styles.stockMetric}>
-                        <Text style={styles.stockMetricValue}>{walkUpAvailable}</Text>
-                        <Text style={styles.stockMetricLabel}>WALK-UP</Text>
+                        <Text style={styles.stockMetricValue}>{available}</Text>
+                        <Text style={styles.stockMetricLabel}>AVAILABLE</Text>
                       </View>
                     </View>
                     <Pressable
@@ -256,7 +255,7 @@ export function DriverScreen({ buildPricing, currentWorkplace, inventory, onAdva
                       style={[styles.quickSaleButton, !canSellWalkUp && styles.quickSaleButtonDisabled]}
                     >
                       <Text style={[styles.quickSaleText, !canSellWalkUp && styles.quickSaleTextDisabled]}>
-                        {!product.available ? 'Unavailable in menu' : stopMode ? (walkUpAvailable > 0 ? 'Sell 1' : 'Walk-up stock sold out') : 'Available after arrival'}
+                        {!product.available ? 'Unavailable in menu' : stopMode ? (available > 0 ? 'Sell 1' : 'No unreserved stock') : 'Available after arrival'}
                       </Text>
                     </Pressable>
                     {latestSale?.productId === product.id && latestSale.workplace === currentWorkplace ? (
@@ -321,7 +320,6 @@ const styles = StyleSheet.create({
   progressTrack: { backgroundColor: colors.line, borderRadius: radius.pill, height: 6, marginVertical: spacing.lg, overflow: 'hidden' },
   progressFill: { backgroundColor: colors.orange, borderRadius: radius.pill, height: '100%', width: '68%' },
   stopActions: { flexDirection: 'row', gap: spacing.sm },
-  navigateButton: { alignItems: 'center', backgroundColor: colors.ink, borderRadius: radius.md, flex: 1, justifyContent: 'center', minHeight: 48 },
   navigateText: { color: colors.paper, fontSize: type.label, fontWeight: '800' },
   arrivedButton: { alignItems: 'center', backgroundColor: colors.mustard, borderRadius: radius.md, flex: 1, justifyContent: 'center', minHeight: 48 },
   arrivedButtonDone: { backgroundColor: colors.greenSoft },

@@ -1,4 +1,5 @@
-import { useMemo, useReducer, useState } from 'react';
+import { canOrderOnline, initialOrderCutoffAt } from './src/onlineOrdering';
+import { useMemo, useRef, useState } from 'react';
 import { AuthGate, type AuthenticatedAppProps } from './src/auth/AuthGate';
 import { type CurrentProfile, useCurrentProfile } from './src/auth/useCurrentProfile';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +14,7 @@ import { colors } from './src/theme';
 import {
   initialBuildYourOwnPricing,
   initialInventory,
+  availableStock,
   orders as initialOrders,
   products as initialProducts,
   type BuildYourOwnPricing,
@@ -24,6 +26,7 @@ import {
 import { notifyVanArrived } from './src/notifications';
 
 type LocalOrderState = {
+  orderCutoffAt: number;
   orders: Order[];
   nextOrderId: number;
   inventory: Inventory;
@@ -31,7 +34,7 @@ type LocalOrderState = {
 };
 
 type LocalOrderAction =
-  | { type: 'reserve'; order: Omit<Order, 'id' | 'orderNumber'> }
+  | { type: 'reserve'; attemptedAt: number; order: Omit<Order, 'id' | 'orderNumber'> }
   | { type: 'advance'; orderId: string; expectedStatus: Order['status'] }
   | { type: 'sellWalkUp'; event: WalkUpSaleEvent }
   | { type: 'undoWalkUp'; eventId: string };
@@ -40,10 +43,11 @@ const currentWorkplace = 'Acero';
 
 function localOrderReducer(state: LocalOrderState, action: LocalOrderAction): LocalOrderState {
   if (action.type === 'reserve') {
+    if (!canOrderOnline(state.orderCutoffAt, action.attemptedAt)) return state;
     const { productId, quantity } = action.order;
     const stock = state.inventory[productId];
     if (!Number.isSafeInteger(quantity) || quantity <= 0 || !stock
-      || stock.physical - stock.reserved - stock.walkUpBuffer < quantity) return state;
+      || availableStock(stock) < quantity) return state;
 
     const order: Order = {
       ...action.order,
@@ -115,7 +119,6 @@ function localOrderReducer(state: LocalOrderState, action: LocalOrderAction): Lo
         [latestSale.productId]: {
           ...stock,
           physical: stock.physical + latestSale.quantity,
-          walkUpBuffer: stock.walkUpBuffer + latestSale.quantity,
         },
       },
       walkUpSales: state.walkUpSales.slice(1),
@@ -126,7 +129,7 @@ function localOrderReducer(state: LocalOrderState, action: LocalOrderAction): Lo
   const stock = state.inventory[productId];
   if (!stock) return state;
 
-  if (stock.walkUpBuffer < action.event.quantity || stock.physical - stock.reserved < action.event.quantity) {
+  if (!Number.isSafeInteger(action.event.quantity) || action.event.quantity <= 0 || availableStock(stock) < action.event.quantity) {
     return state;
   }
 
@@ -137,7 +140,6 @@ function localOrderReducer(state: LocalOrderState, action: LocalOrderAction): Lo
       [productId]: {
         ...stock,
         physical: stock.physical - action.event.quantity,
-        walkUpBuffer: stock.walkUpBuffer - action.event.quantity,
       },
     },
     walkUpSales: [action.event, ...state.walkUpSales],
@@ -192,12 +194,25 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
   const role = __DEV__ && devPreviewRole !== null
     ? devPreviewRole
     : profile.role === 'owner' || profile.role === 'driver' ? 'driver' : 'customer';
-  const [{ orders, inventory, walkUpSales }, dispatchLocalOrder] = useReducer(localOrderReducer, {
+  const [localOrderState, setLocalOrderState] = useState<LocalOrderState>(() => ({
+    orderCutoffAt: initialOrderCutoffAt(),
     orders: initialOrders,
     nextOrderId: 1,
     inventory: initialInventory,
     walkUpSales: [],
-  });
+  }));
+  const localOrderStateRef = useRef(localOrderState);
+  const { orders, inventory, walkUpSales, orderCutoffAt } = localOrderState;
+
+  const dispatchLocalOrder = (action: LocalOrderAction): boolean => {
+    // Advance before React renders so batched callers observe each other's accepted transitions.
+    const current = localOrderStateRef.current;
+    const next = localOrderReducer(current, action);
+    if (next === current) return false;
+    localOrderStateRef.current = next;
+    setLocalOrderState(next);
+    return true;
+  };
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [buildPricing, setBuildPricing] = useState<BuildYourOwnPricing>(initialBuildYourOwnPricing);
   const [stopMode, setStopMode] = useState(false);
@@ -207,12 +222,15 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
   )), [buildPricing.bases.Cob, products]);
 
   const reserveProduct = (product: Product, quantity: number, options: string) => {
+    const attemptedAt = Date.now();
+    if (!canOrderOnline(orderCutoffAt, attemptedAt)) return false;
     const currentProduct = pricedProducts.find((item) => item.id === product.id);
-    if (!currentProduct?.available) return;
+    if (!currentProduct?.available) return false;
     const orderedProduct = product.custom ? product : currentProduct;
 
-    dispatchLocalOrder({
+    return dispatchLocalOrder({
       type: 'reserve',
+      attemptedAt,
       order: {
         customerId: user.id,
         customer: profile.displayName,
@@ -238,7 +256,7 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
   const recordWalkUpSale = (productId: string, workplace: string) => {
     const product = pricedProducts.find((item) => item.id === productId);
     const stock = inventory[productId];
-    if (!product?.available || product.fulfilmentType !== 'ready_stock' || !stock || stock.walkUpBuffer <= 0 || stock.physical <= stock.reserved) return;
+    if (!product?.available || product.fulfilmentType !== 'ready_stock' || !stock || availableStock(stock) <= 0) return;
 
     const timestamp = Math.max(Date.now(), (walkUpSales[0]?.timestamp ?? 0) + 1);
     dispatchLocalOrder({
@@ -276,6 +294,7 @@ function CobVanPrototype({ onSignOut, profile, profileError, signOutError, signi
       {role === 'customer' ? (
         <CustomerScreen
           buildPricing={buildPricing}
+          orderCutoffAt={orderCutoffAt}
           displayName={profile.displayName}
           inventory={inventory}
           onOpenDriverPreview={() => { if (__DEV__) setDevPreviewRole('driver'); }}

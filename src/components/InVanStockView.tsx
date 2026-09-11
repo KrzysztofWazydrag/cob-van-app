@@ -1,29 +1,30 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { reservableCount, type Inventory, type Product } from '../data';
+import { availableStock, type Inventory, type Product } from '../data';
 import { colors, radius, shadow, spacing, type } from '../theme';
 import { FoodImage } from './FoodImage';
 
 type InVanStockViewProps = {
+  onlineOrderingOpen: boolean;
   inventory: Inventory;
   onChoose: (product: Product) => void;
   products: Product[];
 };
 
-export function InVanStockView({ inventory, onChoose, products }: InVanStockViewProps) {
+export function InVanStockView({ onlineOrderingOpen, inventory, onChoose, products }: InVanStockViewProps) {
   const readyStock = products.filter(
-    (product) => product.available && product.fulfilmentType === 'ready_stock' && reservableCount(inventory[product.id]) > 0,
+    (product) => product.available && product.fulfilmentType === 'ready_stock' && availableStock(inventory[product.id]) > 0,
   );
 
   return (
     <View style={styles.content}>
       <Text style={styles.eyebrow}>READY RIGHT NOW</Text>
       <Text style={styles.title}>In the van</Text>
-      <Text style={styles.intro}>Prepared and ready to collect. Reserve before it goes.</Text>
+      <Text style={styles.intro}>{onlineOrderingOpen ? 'Prepared and ready to collect. Reserve before it goes.' : 'Remaining stock is available to buy at the van.'}</Text>
       {readyStock.length > 0 ? (
         <View style={styles.list}>
           {readyStock.map((product) => {
             const stock = inventory[product.id];
-            const available = reservableCount(stock);
+            const available = availableStock(stock);
 
             return (
               <View key={product.id} style={styles.card}>
@@ -36,10 +37,12 @@ export function InVanStockView({ inventory, onChoose, products }: InVanStockView
                 <Pressable
                   accessibilityLabel={`Reserve ${product.name}, ${available} available`}
                   accessibilityRole="button"
-                  onPress={() => onChoose(product)}
-                  style={({ pressed }) => [styles.reserveButton, pressed && styles.reserveButtonPressed]}
+                  accessibilityState={{ disabled: !onlineOrderingOpen }}
+                  disabled={!onlineOrderingOpen}
+                  onPress={() => { if (onlineOrderingOpen) onChoose(product); }}
+                  style={({ pressed }) => [styles.reserveButton, !onlineOrderingOpen && { opacity: 0.5 }, pressed && styles.reserveButtonPressed]}
                 >
-                  <Text style={styles.reserveText}>Reserve</Text>
+                  <Text style={styles.reserveText}>{onlineOrderingOpen ? 'Reserve' : 'Online ordering closed'}</Text>
                 </Pressable>
               </View>
             );

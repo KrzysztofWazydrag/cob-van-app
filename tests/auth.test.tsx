@@ -62,6 +62,7 @@ const fill = async (label: string, value: string) => {
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 10, 9, 0).getTime());
   mocks.platform.OS = 'ios';
   mocks.backListener = null;
   mocks.addBackListener.mockImplementation((_event: string, listener: () => boolean) => {
@@ -370,7 +371,7 @@ async function openLocalCustomer() {
 test('reservation creates one order and reserves exactly the requested quantity', async () => {
   const before = await openLocalCustomer();
   const product = products.find((item) => item.id === 'bacon-egg')!;
-  await act(async () => before.onReserve(product, 2, 'No sauce'));
+  await act(async () => { expect(before.onReserve(product, 2, 'No sauce')).toBe(true); });
   const after = tree.root.findByType(CustomerScreen).props;
   expect(after.orders).toHaveLength(before.orders.length + 1);
   expect(after.orders[0]).toMatchObject({ productId: product.id, quantity: 2, customerId: session.user.id });
@@ -379,7 +380,7 @@ test('reservation creates one order and reserves exactly the requested quantity'
 
 test.each([100, 0, -1, 1.5, NaN])('unreservable quantity %s leaves orders and stock unchanged', async (quantity) => {
   const before = await openLocalCustomer();
-  await act(async () => before.onReserve(products[1], quantity, 'No sauce'));
+  await act(async () => { expect(before.onReserve(products[1], quantity, 'No sauce')).toBe(false); });
   const after = tree.root.findByType(CustomerScreen).props;
   expect(after.orders).toEqual(before.orders);
   expect(after.inventory).toEqual(before.inventory);
@@ -389,12 +390,12 @@ test('batched reservations cannot create orders beyond reservable stock', async 
   const before = await openLocalCustomer();
   const product = products.find((item) => item.id === 'full-english')!;
   await act(async () => {
-    before.onReserve(product, 2, 'No sauce');
-    before.onReserve(product, 2, 'No sauce');
+    expect(before.onReserve(product, 3, 'No sauce')).toBe(true);
+    expect(before.onReserve(product, 3, 'No sauce')).toBe(false);
   });
   const after = tree.root.findByType(CustomerScreen).props;
   expect(after.orders).toHaveLength(before.orders.length + 1);
-  expect(after.inventory[product.id]).toEqual({ ...before.inventory[product.id], reserved: before.inventory[product.id].reserved + 2 });
+  expect(after.inventory[product.id]).toEqual({ ...before.inventory[product.id], reserved: before.inventory[product.id].reserved + 3 });
 });
 
 test('successful reservations in the same millisecond have distinct IDs', async () => {
@@ -524,4 +525,90 @@ test('Android back during signup returns to Sign In without cancelling or repeat
   expect(mocks.auth.signUp).toHaveBeenCalledOnce();
   expect(text()).toContain('Check your email to confirm your account');
   expect(text()).toContain('Welcome back');
+});
+
+
+test('customers can reserve the entire unreserved physical pool', async () => {
+  const before = await openLocalCustomer();
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await act(async () => before.onReserve(product, 7, 'No sauce'));
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.inventory[product.id]).toEqual({ physical: 8, reserved: 8 });
+  expect(after.orders).toHaveLength(before.orders.length + 1);
+});
+
+test.each(['reservation-first', 'sale-first'])('shared pool prevents mixed batched overselling: %s', async (sequence) => {
+  const customer = await openLocalCustomer();
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await press('Customer prototype');
+  const crew = tree.root.findByType(DriverScreen).props;
+  const reserve = () => customer.onReserve(product, 7, 'No sauce');
+  const sell = () => crew.onWalkUpSale(product.id, 'Acero');
+  await act(async () => {
+    if (sequence === 'reservation-first') { reserve(); sell(); }
+    else { sell(); reserve(); }
+  });
+  const after = tree.root.findByType(DriverScreen).props;
+  expect(after.inventory[product.id]).toEqual(sequence === 'reservation-first'
+    ? { physical: 8, reserved: 8 } : { physical: 7, reserved: 1 });
+  expect(after.orders.length - customer.orders.length).toBe(sequence === 'reservation-first' ? 1 : 0);
+  expect(after.walkUpSales).toHaveLength(sequence === 'sale-first' ? 1 : 0);
+});
+
+test('walk-up sales use all shared stock, protect reservations and update customer availability', async () => {
+  await openLocalCustomer();
+  await press('Customer prototype');
+  const crew = tree.root.findByType(DriverScreen).props;
+  await press('Stock');
+  expect(text()).toContain('AVAILABLE');
+  expect(text()).toContain('PHYSICAL');
+  expect(text()).not.toContain('ONLINE');
+  expect(text()).not.toContain('WALK-UP');
+  await act(async () => {
+    for (let i = 0; i < 9; i++) crew.onWalkUpSale('bacon-egg', 'Acero');
+  });
+  const sold = tree.root.findByType(DriverScreen).props;
+  expect(sold.inventory['bacon-egg']).toEqual({ physical: 1, reserved: 1 });
+  expect(sold.walkUpSales).toHaveLength(7);
+  await act(async () => sold.onUndoWalkUpSale(sold.walkUpSales[0].id));
+  expect(tree.root.findByType(DriverScreen).props.inventory['bacon-egg']).toEqual({ physical: 2, reserved: 1 });
+  await press('DEV · CUSTOMER');
+  expect(tree.root.findByType(CustomerScreen).props.inventory['bacon-egg']).toEqual({ physical: 2, reserved: 1 });
+});
+
+
+test.each([0, 1])('cutoff rejects a stale reservation callback at cutoff + %s ms without changing existing orders', async (offset) => {
+  const customer = await openLocalCustomer();
+  await act(async () => customer.onReserve(products[1], 1, 'No sauce'));
+  const before = tree.root.findByType(CustomerScreen).props;
+  vi.spyOn(Date, 'now').mockReturnValue(before.orderCutoffAt + offset);
+  await act(async () => {
+    expect(customer.onReserve(products[1], 1, 'No sauce')).toBe(false);
+  });
+  const after = tree.root.findByType(CustomerScreen).props;
+  expect(after.orders).toEqual(before.orders);
+  expect(after.inventory).toEqual(before.inventory);
+});
+
+test('reservation just before cutoff succeeds; post-cutoff crew sales consume only unreserved stock', async () => {
+  const customer = await openLocalCustomer();
+  vi.spyOn(Date, 'now').mockReturnValue(customer.orderCutoffAt - 1);
+  const product = products.find((item) => item.id === 'bacon-egg')!;
+  await act(async () => customer.onReserve(product, 2, 'No sauce'));
+  const reserved = tree.root.findByType(CustomerScreen).props;
+  expect(reserved.inventory[product.id]).toEqual({ physical: 8, reserved: 3 });
+  expect(reserved.orders).toHaveLength(customer.orders.length + 1);
+  vi.spyOn(Date, 'now').mockReturnValue(customer.orderCutoffAt + 1);
+  await press('Customer prototype');
+  const crew = tree.root.findByType(DriverScreen).props;
+  await act(async () => crew.onToggleStopMode());
+  await press('Stock');
+  expect(tree.root.findByProps({ accessibilityLabel: 'Record one walk-up sale of Bacon & egg cob' }).props.disabled).toBe(false);
+  await act(async () => {
+    for (let i = 0; i < 8; i++) crew.onWalkUpSale(product.id, 'Acero');
+  });
+  const sold = tree.root.findByType(DriverScreen).props;
+  expect(sold.inventory[product.id]).toEqual({ physical: 3, reserved: 3 });
+  expect(sold.orders).toEqual(reserved.orders);
+  expect(sold.walkUpSales).toHaveLength(5);
 });

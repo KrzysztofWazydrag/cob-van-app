@@ -3,6 +3,7 @@ import { act, create } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 vi.mock('react-native', () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   ActivityIndicator: 'ActivityIndicator', ImageBackground: 'ImageBackground', Modal: 'Modal',
   Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View',
   StyleSheet: { create: (styles: unknown) => styles },
@@ -40,7 +41,7 @@ const expectNoOperationalClaims = () => {
 
 test.each([false, true])('tracking remains a demo for another workplace with stopMode=%s', async (stopMode) => {
   await act(async () => {
-    tree = create(<CustomerScreen
+    tree = create(<CustomerScreen orderCutoffAt={Date.now() + 3600000}
       buildPricing={initialBuildYourOwnPricing} displayName="Customer"
       inventory={initialInventory} products={products} orders={[]}
       onOpenDriverPreview={vi.fn()} onReserve={vi.fn()} onSignOut={vi.fn()}
@@ -64,7 +65,7 @@ test.each([false, true])('tracking remains a demo for another workplace with sto
   expectNoOperationalClaims();
   await act(async () => tree.root.findByProps({ accessibilityLabel: 'Close van tracking' }).props.onPress());
   expect(tree.root.findByType(VanTrackingModal).props.visible).toBe(false);
-  expect(vi.getTimerCount()).toBe(0);
+  expect(vi.getTimerCount()).toBe(1); // Customer cutoff timer remains active.
   await act(async () => tree.root.findByProps({ accessibilityLabel: 'Open tracking demo' }).props.onPress());
   expect(tree.root.findByType(VanMap).props.coordinate).toEqual(vanRoute[0]);
   expect(visibleText()).toContain('Simulated movement');
