@@ -2,6 +2,12 @@
 
 Expo app for iOS, Android, and web with Supabase email/password authentication and a local product prototype.
 
+## Screenshots
+
+| Customer app | Van crew workflow |
+| --- | --- |
+| <img src="docs/screenshots/customer-home.png" alt="Cob Van customer home screen with live tracking and menu" width="320" /> | <img src="docs/screenshots/van-crew-orders.png" alt="Cob Van crew screen with stop details and order handover workflow" width="320" /> |
+
 ## What is included
 
 - Customer home with tappable live ETA tracking, ready van stock, menu categories, and low-stock prompts
